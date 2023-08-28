@@ -42,8 +42,9 @@ models:
       +materialized: view
       +schema: REFINED                     # a custom schema part
     marts:                            # data delivery layer
-      +materialized: table
-      +schema: MART_PORTFOLIO
+      portfolio:
+        +materialized: table
+        +schema: MART_PORTFOLIO
 snapshots:
   portfolio_tracking:
     +target_schema: SNAPSHOTS
