@@ -2,8 +2,8 @@
 # Name your project! Project names should contain only lowercase characters
 # and underscores. A good package name should reflect your organization's
 # name or the intended use of these models
-name: 'my_new_project'
-version: '1.0.0'
+name: 'portfolio_tracking'
+version: '0.1.0'
 config-version: 2
 
 # This setting configures which "profile" dbt uses for this project.
@@ -32,7 +32,19 @@ clean-targets:         # directories to be removed by `dbt clean`
 # as tables. These settings can be overridden in the individual model files
 # using the `{{ config(...) }}` macro.
 models:
-  my_new_project:
-    # Applies to all files under models/example/
-    example:
-      materialized: view
+  portfolio_tracking:
+    +materialized: view
+    staging:                          # data storage layer
+      +materialized: view
+      +schema: STAGING
+    # Applies to all files under models/refined/
+    refined:                          # Refined data layer
+      +materialized: view
+      +schema: REFINED                     # a custom schema part
+    marts:                            # data delivery layer
+      portfolio:
+        +materialized: table
+        +schema: MART_PORTFOLIO
+snapshots:
+  portfolio_tracking:
+    +target_schema: SNAPSHOTS
