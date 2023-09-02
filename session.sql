@@ -1,0 +1,50 @@
+-- general queries
+select current_user();
+select current_role();
+SHOW ROLES;
+SHOW GRANTS TO ROLE USERADMIN; -- 
+
+-- create first user
+USE ROLE USERADMIN;
+CREATE ROLE DBT_EXECUTOR_ROLE
+  COMMENT = 'Role for the users running DBT models';
+
+GRANT ROLE DBT_EXECUTOR_ROLE TO USER jeh;
+
+-- create database
+--- grant db creation rights to dbt_role
+USE ROLE SYSADMIN;
+GRANT CREATE DATABASE ON ACCOUNT
+  TO ROLE DBT_EXECUTOR_ROLE;
+-- failing, sysadmin doesnt seem to have grants on warehouse COMPUTE_WH
+GRANT USAGE ON WAREHOUSE COMPUTE_WH
+  TO ROLE DBT_EXECUTOR_ROLE;
+
+-- alter the warehouse
+USE ROLE ACCOUNTADMIN;
+ALTER WAREHOUSE "COMPUTE_WH" SET
+    WAREHOUSE_SIZE = 'XSMALL'
+    AUTO_SUSPEND = 60
+    AUTO_RESUME = TRUE
+    COMMENT = 'Default Warehouse';
+
+-- create db PORTFOLIO_TRACKING
+USE ROLE DBT_EXECUTOR_ROLE;
+show grants to ROLE DBT_EXECUTOR_ROLE;
+CREATE DATABASE PORTFOLIO_TRACKING;
+
+-- create user dbt_executor
+USE ROLE USERADMIN;
+CREATE USER IF NOT EXISTS DBT_EXECUTOR
+  COMMENT = 'User running DBT commands'
+  PASSWORD = 'pick_a_password'
+  DEFAULT_WAREHOUSE = 'COMPUTE_WH'
+  DEFAULT_ROLE = 'DBT_EXECUTOR_ROLE';
+
+GRANT ROLE DBT_EXECUTOR_ROLE TO USER DBT_EXECUTOR;  
+USE ROLE DBT_EXECUTOR_ROLE;
+
+-- 
+use database PORTFOLIO_TRACKING;
+show tables;
+
