@@ -48,3 +48,43 @@ USE ROLE DBT_EXECUTOR_ROLE;
 use database PORTFOLIO_TRACKING;
 show tables;
 
+-- loading csv file in a landing table via a Snowflake FILE FORMAT
+--- Create the landing table that will hold the external data.
+USE ROLE DBT_EXECUTOR_ROLE;
+CREATE SCHEMA PORTFOLIO_TRACKING.SOURCE_DATA;
+create or replace table PORTFOLIO_TRACKING.SOURCE_DATA.ABC_BANK_POSITION (
+  accountID         TEXT,
+  symbol            TEXT,
+  description       TEXT,
+  exchange          TEXT,
+  report_date       DATE,
+  quantity          NUMBER(38,0),
+  cost_base         NUMBER(38,5),
+  position_value    NUMBER(38,5),
+  currency          TEXT
+);
+--- provide Snowflake with the structure of the CSV file
+CREATE FILE FORMAT
+  PORTFOLIO_TRACKING.SOURCE_DATA.ABC_BANK_CSV_FILE_FORMAT
+    TYPE = 'CSV'
+        COMPRESSION = 'AUTO'
+        FIELD_DELIMITER = ','
+        RECORD_DELIMITER = '\n'
+        SKIP_HEADER = 1
+        FIELD_OPTIONALLY_ENCLOSED_BY = '\042'
+        TRIM_SPACE = FALSE
+        ERROR_ON_COLUMN_COUNT_MISMATCH = TRUE
+        ESCAPE = 'NONE'
+        ESCAPE_UNENCLOSED_FIELD = '\134'
+        DATE_FORMAT = 'AUTO'
+        TIMESTAMP_FORMAT = 'AUTO'
+        NULL_IF = ('\\N')
+;
+--- Manually load the external data from the CSV file in the landing table.
+----PUT file://C:/jeroen/p/sidehustle/reinrail/dbt-book/portfolio-tracking-dbt/ABC_Bank_PORTFOLIO__2021-04-09.csv 
+----  @PORTFOLIO_TRACKING.SOURCE_DATA%ABC_BANK_POSITION/csv/ABC_Bank_PORTFOLIO__2021-04-09.csv;
+---- the PUT does not work, docs say a PUT can not be done in SnowUI, only in SnowSQL
+select * from ABC_BANK_POSITION;
+
+--- Define the landing table as our source table.
+--- Read the data from the source table to start our ELT.
