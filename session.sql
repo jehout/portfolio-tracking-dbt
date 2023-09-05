@@ -107,3 +107,7 @@ show views;
 
 describe view POSITION_ABC_BANK;
 describe view STG_ABC_BANK_POSITION;
+
+-- chapter 6: refined model names
+use schema JEH_REFINED;
+drop view POSITION_ABC_BANK;
