@@ -88,3 +88,21 @@ select * from ABC_BANK_POSITION;
 
 --- Define the landing table as our source table.
 --- Read the data from the source table to start our ELT.
+
+
+show schemas;
+
+use schema JEH_REFINED;
+use schema JEH_STAGING;
+show tables;
+show views;
+
+-- generating Adapter
+    SELECT
+      ', ' || COLUMN_NAME || ' as '|| COLUMN_NAME  || ' -- ' || DATA_TYPE as SQL_TEXT
+    FROM PORTFOLIO_TRACKING.INFORMATION_SCHEMA.COLUMNS  -- adapt to your DB
+    WHERE TABLE_SCHEMA = 'SOURCE_DATA'
+      AND TABLE_NAME = 'ABC_BANK_POSITION'
+    ORDER BY ORDINAL_POSITION;                       -- the order of the columns in the table
+
+describe view POSITION_ABC_BANK;
