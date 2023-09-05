@@ -106,3 +106,4 @@ show views;
     ORDER BY ORDINAL_POSITION;                       -- the order of the columns in the table
 
 describe view POSITION_ABC_BANK;
+describe view STG_ABC_BANK_POSITION;
