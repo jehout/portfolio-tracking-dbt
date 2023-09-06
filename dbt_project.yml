@@ -39,3 +39,6 @@ models:
 snapshots:
   portfolio_tracking:
     +target_schema: SNAPSHOTS
+
+seeds:                                # Configuring Seeds
+  +schema: seed_data
