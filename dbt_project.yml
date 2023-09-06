@@ -41,4 +41,11 @@ snapshots:
     +target_schema: SNAPSHOTS
 
 seeds:                                # Configuring Seeds
-  +schema: seed_data
+  +schema: seed_data                  # this is applied to all seeds, including the ones imported by other libraries
+  portfolio_tracking:                 # seeds of our prj
+    ABC_Bank_SECURITY_INFO:
+      +column_types:
+        LOAD_TS: TIMESTAMP 
+      +post-hook:
+        - "UPDATE {{ this }} SET LOAD_TS = '{{ run_started_at }}' WHERE LOAD_TS is null"
+ 
