@@ -46,6 +46,6 @@ seeds:                                # Configuring Seeds
     ABC_Bank_SECURITY_INFO:
       +column_types:
         LOAD_TS: TIMESTAMP 
-      +post-hook:
+      +post-hook:                     # SQL that runs after the creation of the model
         - "UPDATE {{ this }} SET LOAD_TS = '{{ run_started_at }}' WHERE LOAD_TS is null"
  
