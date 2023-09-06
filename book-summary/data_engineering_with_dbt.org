@@ -2975,7 +2975,7 @@ select … from {{ source / ref }}
       - n..n can not be represented in star schema
   - star schema
     - [[./ch7-star_schema-position.jpg]]
-**** loading data of first dimension
+**** loading data of first dimension from .csv to seed table
 - commit & push the .CSV under /seeds
 - configure dbt_project.yml to load the seed in schema 'seed_data'
 - run ~dbt seed~
