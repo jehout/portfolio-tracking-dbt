@@ -111,3 +111,8 @@ describe view STG_ABC_BANK_POSITION;
 -- chapter 6: refined model names
 use schema JEH_REFINED;
 drop view POSITION_ABC_BANK;
+
+-- setting up the history with a dbt snapshot
+--- we drop the STG view before we make it "ephemeral"
+use schema JEH_STAGING;
+drop view STG_ABC_BANK_POSITION;
