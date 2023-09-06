@@ -1,0 +1,2992 @@
+* data engineering with dbt
+#+STARTUP: inlineimages
+- https://github.com/PacktPublishing/Data-engineering-with-dbt
+- https://vigbmpq-ed54024.snowflakecomputing.com
+
+** 1: sql to transform data
+*** what is working with dbt?
+- building one object on top of the previous
+  - input: raw data
+  - output: refined information
+  - by: combining
+    - tables
+      - that store data
+    - views
+      - that filter and transform the data
+	- coming from tables and views
+  - => easy access and understanding
+*** SQL
+- quotes 
+  - Single :: to delimit a string of text
+  - Double :: a name of an DB object
+**** DB organisation 
+- View :: filters/transform data coming from tables and views
+- Table :: stores data 
+- Database :: container for tables & views
+- Schema :: a part of DB
+  - fully qualified name: "database.schema"
+- Role :: entity that can be granted privileges
+  - can get Role(s)
+  - => a security hierarchy of roles, simpel -> complex
+  - ==: a label for a group of privileges, hierarchically organized
+  - to: manage priveleges of groups of users consistently
+- User :: a person or service
+  - can get Role(s)
+***** best practices 'DB organisation'
+- a DB
+  - per: set of data OR prj that you want to keep separate
+- a schema
+  - per:
+    - source system
+    - DWH
+    - data mart
+  - per: environment
+- a role
+  - to:
+    - read
+    - write
+  - per: schema
+- assign
+  - privileges to Roles
+    - not to Users
+      - bc: not scalable
+  - Roles to other Roles and Users
+- dbt is a Role
+  - assign it to the users of dbt
+    - developers 
+    - services
+  - good name: DBT_EXECUTOR_ROLE
+- which role to use?
+  - the one with the lowest access level that can accomplish a task
+  - for creating objects:
+    - the one we want to use to manage it
+      - bc: for some operations ownerschip is necessary
+	- some operations: eg. delete
+	- ownership: an object is owned by the impersonated role that created it
+	  - impersonate: "USE ROLE <role-name>;"
+	  - SHOW GRANTS TO ROLE <role-name>;
+	  - SHOW ROLES;
+- use the DDL and DML commands only in macros
+  - not in models
+  - bc: dbt will generate the required commands for our models
+    - based on the metadata attached to the model
+
+**** query syntax 
+***** WITH
+- Common Table Expressions ::
+  - CTEs
+  - is: a supporting query for the main SELECT
+    - can be used 1..n times in the main SELECT
+    - named in the scope of the main select
+  - for:
+    - clarity
+      - the name clarifies what it does
+      - its business logic must not be mixed with other business logic in main WHERE clause
+    - efficiency
+      - when the CTE is used multiple times in the main SELECT, it is executed only once
+    - creating recursive queries
+      - by: defining a query that calls itself
+      - made of 2 parts:
+	- anchor part
+	  - before the UNION ALL
+	  - sets the initial values
+	    - with a query
+	- recursive part
+	  - after the UNION ALL
+	  - retrieves recursively each layer
+	    - by: joining base table with previous recursive iteration
+	      - base table: has the name of the CTE
+	      - recursive iteration: has an alias, but also the same CTE name
+      - enables calculating fields over the full recursive path
+***** SELECT
+- to:
+  - select data from 0..n sources
+    - 0 source: values clause
+      - ~SELECT * FROM VALUES ('Amsterdam', 1), ('London', 2);~
+  - calculate data with functions
+- AS ::
+  - to: assign new names to data
+- DISTINCT ::
+  - to:
+    - reduce results to one copy of each distinct result row
+    - remove duplicate result rows
+- * EXCLUDE (<column>, ...) RENAME (<column> as <new-column-name>, ...)
+***** FROM
+- to: specify the source of the data
+  - tables and views
+- if 2..n sources => cartesian product is made
+  - =>
+    - many results
+    - !: use a WHERE
+      - to: keep only related data
+***** JOIN
+- subclause of FROM
+- to: describe the condition of how to combine sources 
+  - condition:
+    - boolean expression
+    - does not need to be an '=' on columns
+- order of joins
+  - !: might matter for performance
+  - is: from left to right
+- type of joins
+  - INNER JOIN :
+    - same as: FROM + WHERE cartesian product
+***** WHERE
+- to: filter rows
+  - with: a predicate
+    - predicate:
+      - is: an expression that returns a boolean
+      - !: ~NULL = NULL~ evaluates to NULL
+	- => row is NOT kept
+	- test for null with IS NULL
+	  - ~field IS NULL~
+***** GROUP BY
+- to: apply aggregate functions
+  - on: groups of rows
+    - that: have the same result for the GROUP BY expression
+      - expression:
+	- a column name -> the value of the column
+	- a number -> the value of the corresponding column in the SELECT
+	- an SQL expression combining data from the query
+	  - example: year(orderDate)
+  - aggregate function:
+    - is: reduces a set of values to 1 value
+- can have multiple expressions
+  - first group is sub-divided with the subsequent grouping expression
+***** HAVING
+- to: filter the groups of the GROUP BY
+  - is like: the WHERE of a FROM
+- is: a predicate
+  - containing:
+    - constants
+    - expressions from the GROUP BY 
+    - aggregated functions calculated to the GROUP BY
+***** QUALIFY
+- to: filter on results of window functions
+- window function
+  - calculates a value for each row in the same window
+  - example:
+    - row_number()
+      - assigns a serial number to the row in the window
+- a window
+  - is: an ordered partition
+  - defined by:
+    - OVER(...) ::
+      - has 2 parts:
+	- PARTITION BY ::
+	  - defines a partition
+	  - ~: a GROUP BY
+	- ORDER BY ::
+	  - provides an ordering in the window
+- common use case:
+  - defend against undesired duplicates
+  - select 1 specific row among rows that represent different version of the same object
+***** ORDER BY
+- is:
+  - an expression
+  - or: a set of expressions
+    - separated by: ','
+- to: order the results of the query or window partition
+- often with the same expression as the GROUP BY
+- optional:
+  - ASC/DESC
+  - NULLS FIRST/LAST
+***** LIMIT <count>
+- optional: OFFSET <start>
+  - !: only useful in combination with an ORDER BY
+***** 3 types of data calcuation in a query
+- expression
+- group by
+- window functions
+***** 3 clauses for filtering data
+- WHERE -> data from sources (FROM/JOIN)
+- HAVING -> grouped data formed by GROUP BY
+- QUALIFY -> data from FROM and GROUPED BY, filtered on data calculated with a window function
+***** order of execution
+- FROM, JOIN ... ON
+  - identify source data
+- WHERE
+  - filter out source data
+- GROUP BY
+  - create groups
+  - calculate aggregate functions
+- HAVING
+  - filter groups
+- partition the data in windows, calucation of window functions
+- QUALIFY filter data on results of window functions
+- DISTINCT
+  - remove duplicate rows
+- ORDER BY
+  - order results
+- LIMIT results
+***** best practice in querying
+- never do an unrestricted cartesin product
+  - =: multiple sources in the FROM + no WHERE clause
+- use ~INNER JOIN ... ON ...~
+  - rather than ~FROM t1, t2 WHERE ...~
+  - to: separate the conditions
+    - condition for the JOIN
+    - condition for data filtering
+- use ~SELECT ... FROM t1 CROSS JOIN t2;~
+  - instead of: ~SELECT ... FROM t1, t2;~
+  - to: explicitly show you want the cartesian product
+    - instead of leaving doubt wheather or not you forgot a WHERE
+- order joins intelligently
+  - what: restrict number of results ASAP
+  - for: perfomance
+**** SQL operators
+***** SET operators
+- to:
+  - combine the results of multiple queries
+- pre-condition:
+  - query results must be compatible
+    - =:
+      - each query must return the same number of columns
+      - columns must have same type
+- how:
+  - INTERSECT
+    - returns rows that appear in both query result sets
+      - each column same value
+  - EXCEPT or MINUS
+    - returns rows from query1 that are not in query2
+  - UNION [ALL]
+    - return all rows from query1 + all rows from query2
+    - ALL: keeps duplicate rows
+***** subquery operators
+- to:
+  - use subqueries in WHERE clause
+  - subquery:
+    - =: a query that is defined in another query
+    - can be used as
+      - a table-like object
+      - an expression
+- types:  
+  - ALL/ANY ( <subquery> )
+    - in combination with: a comparison operator
+      - ~<, <=, =, !=, <>, ...~
+    - to: compare a value to all/any values of the subquery
+    - format:
+      - ~... where c1 <comparison operator> ALL/ANY (<a-subquery>)~
+    - examples
+      - /find product that are never ordered in quatity = 1;/
+      - ~... where productID = ALL (
+                select productID from orders where quantity > 1);~
+  - [NOT] IN ( <subquery> )
+    - returns true if the expression is included in the results of the subquery
+  - [NOT] EXIST ( <subquery> )
+    - returns true if the subquery returns at least 1 row
+**** combining data with JOIN
+- to:
+  - create rows
+    - with data from 2 tables
+      - using relations
+	- column in 2 tables that represent the same thing
+	- specify this in the JOIN ... ON ...
+	  - ON: compares values from different tables
+    - with columns specified in the SELECT
+- format:
+  - ~select ... FROM t1 [<join type>] JOIN t2 ON <predicate>~
+- JOIN types
+  - INNER
+    - default
+    - returns rows for which the join matches the condition
+      - predicate is true
+  - LEFT OUTER
+    - returns all rows from the left table, combined with
+      - all matching rows from right
+	- !: can be multiple rows from the right
+      - or a row with all NULLs
+  - RIGHT OUTER
+  - FULL OUTER
+    - returns all the row from left and right, matching or with NULLs
+  - CROSS 
+    - no ON clause
+      - ~select ... from t1 CROSS JOIN t2~ 
+    - =: ~select ... from t1, t2~
+    - =: cartesian product
+  - NATURAL <type>
+    - ~select ... from t1 NATURAL INNER JOIN t2~
+    - no ON clause
+    - uses columns with same name + equality condition
+    - returns only one of those 'equal' columns
+- OUTER JOIN use case: searching 'orphan records'
+  - example
+    - Orders for which the referenced Customer does not exist in table Customers
+    - ~select *~
+      ~from Orders~
+      ~LEFT OUTER JOIN Customers 
+        ON Orders.id = Customers.id~
+      ~where Customers.id IS NULL;~
+    - this query should return 0 rows
+      - bc: the customer of every orders should be known
+**** window functions
+- are calculated
+  - over:
+    - a 'window'
+      - =: an ordered partition of the rows of a query result
+      - defined by: ~OVER (PARTITION BY ..., ... ORDER BY ...)~
+	- devides the rows of the query in disjointed partitions
+	  - PARTITION BY ::
+	    - comma-separted set of columns or expressions
+	      - like GROUP BY
+	  - ORDER BY ::
+	    - important for: order-sensitive window functions
+      - partitions can be dynamic
+	- dynamic
+	  - based on: current row
+	    - , which changes for every row of the query
+	- see: window frame functions
+  - for:
+    - every row of the query result
+  - how:
+    - per row
+      - a new window is made
+      - the window function is calculated
+- <> aggregate function
+  - ~: calculated on a partition of the query result rows
+    - on the group
+  - <>: 1 value/group
+- exercise:
+  - what is the % of each order to the daily/monthly total?
+    #+BEGIN_SRC sql
+
+  SELECT order_total
+    , SUM(order_total OVER (PARTITION BY order_date)) AS daily_total
+    , order_total / daily_total * 100 AS daily_pct
+    , SUM(order_total OVER (PARTITION BY yearmonth(order_date)) as monthly_total
+    , order_total / monthly_total * 100 AS montly_pct, 
+  FROM orders
+  QUALIFY row_number() 
+    OVER (PARTITION BY order_date ORDER BY order_total DESC) <= 5
+
+    #+END_SRC
+- rank-related functions:
+  - calculates based on: the rank of a row
+    - rank of a row
+      - =: the order of the row in the window
+- window frame functions:
+  - calculates over a dynamic subset of rows
+    - window = fixed
+    - window frame = dynamic
+  - syntax:
+      #+BEGIN_SRC sql
+      <function_name> ([<arguments>])
+        OVER ( [PARTITION BY <part_expr>]
+               ORDER BY <order_expr>
+               <cumulative_frame_def> | <sliding_frame_def>
+              )
+      #+END_SRC
+  - types of window frames:
+    - cumulatieve:
+      - is growing/shrinking
+      - takes rows before/after the current row
+      - cumulative frame definition:
+	- syntax format:
+	#+BEGIN_SRC sql
+          {ROW | RANGE} BETWEEN UNBOUNDED PRECEDING and CURRENT ROW
+	| {ROW | RANGE} BETWEEN CURRENT ROW and UNBOUNDED FOLLOWING
+	#+END_SRC
+	- ROW ::
+	  - =: the frame extends to the limit of the partition
+	    - the limit =: the start or end en of the partition
+	- RANGE ::
+	  - =: the frame extends to the rows that have the same order
+	    - same order =:
+	      - has the same value
+		- as: the current row
+		- for: the ORDER BY field
+    - sliding:
+      - takes some rows before/after the current row
+      - sliding frame definition:
+	#+BEGIN_SRC
+	ROWS BETWEEN <N> { PRECEDING | FOLLOWING }
+             AND <M> { PRECEDING | FOLLOWING }
+      | ROWS BETWEEN UNBOUNDED PRECEDING and <M> { PRECEDING | FOLLOWING }
+      | ROWS BETWEEN <N> { PRECEDING | FOLLOWING } and UNBOUNDED FOLLOWING      
+	#+END_SRC
+*** Snowflake
+- DB SNOWFLAKE
+  - RO info about your account
+- default roles
+  - ACCOUNTADMIN
+    - omnipotent role
+    - do not use it for normal work
+    - has roles: SECURITYADMIN
+  - SECURITYADMIN
+    - has roles: USERADMIN
+  - USERADMIN
+    - to: create users
+    - has privileges:
+      - CREATE ROLE
+      - CREATE USER
+  - SYSADMIN
+    - to: manage the structure of databases and the warehouse settings
+    - has privileges:
+      - CREATE DB
+      - +USE WAREHOUSE+
+  - PUBLIC
+- default database schema's
+  - INFORMATION_SCHEMA
+    - contains: views with info on the DB
+  - PUBLIC
+    - the default schema of the DB
+- Stage :: snowflake managed location
+  - stage files = loading files
+  - commands to stage files
+    - PUT
+    - GET
+    - LIST
+    - REMOVE
+- COPY INTO :: bulk loading of data
+  - from
+    - stage to table
+    - table to stage
+
+** 2: setup dbt cloud env
+*** diff between DBT Core and Cloud
+- to:
+  - simpler, quicker, more productive
+    - development, maintenance, and operations
+- additions:
+  - web-ide
+  - guided git workflow
+    - pull requests
+  - creation of execution jobs
+    - to: run dbt commands reliably
+  - job creation
+    - sheduling
+    - monitoring
+    - alerting
+  - monitoring data source freshness
+  - publishing generated docs
+*** data engineering workflow
+**** core
+***** working with dbt core
+1) create new branch
+2) edit the dbt model
+3) generate/update the SQL file for each model
+   - in /target
+   - ~> dbt compile <switches>~
+4) run the SQL on the DB
+5) update generated SQL, apply the changes to DB
+   1) ~> dbt run <switches>~
+6) execute test
+   1) ~> dbt test <switches>~
+7) commit changes to git
+8) request a pull into main
+
+***** run a dbt prj
+1. choose branch
+2. perform operations
+   1. ~> dbt run-operation~
+      - setup access
+      - import data into landing tables
+   2. check data source freshness: ~> dbt source freshness~
+   3. run test on the source data or landing tables
+   4. store the changes in the source, test the snapshots: ~> dbt snapshot~
+   5. run dbt models: ~> dbt run~
+   6. generate docs: ~> dbt docs generate~
+3. verify execution
+   - =: verify output/logs
+   - =>: have checks on the output
+4. setup capture + storage of logs
+5. setup scheduling
+   - cron
+6. setup capture + store + publish freshness check
+7. setup publication of docs
+   1) copy to a S3 file bucket
+   2) publish
+**** cloud
+***** create a dbt prj
+1. create new branch for the new feature
+2. edit files
+3. test the model
+   - click 'preview' / 'compile'
+     - compiles + executes / compiles
+4. iterate on the model
+5. run the model on the DB
+   - ~> dbt run <switches>~
+6. test
+   - ~> dbt test <switches>~
+7. commit
+8. open a pull request
+***** run a dbt prj
+- select code version to run
+- define env
+- configure job
+  - define execution schedule
+  - define commands to run
+  - choose
+    - data freshness check
+    - docs publication
+    - notifications
+      - running, interrupted, failed
+- start the job
+  - manually
+  - with rest
+  - on schedule
+- 
+*** default dbt project
+*** key functions: ref, source
+** 3: data modeling
+- data modeling
+  - to:
+    - convey information effectively
+    - understand the data
+      - data is only information when it is understood
+  - what:
+    - make data simple to read
+  - how:
+    - limit the info shown per level of modeling detail
+      - more detailed level -> show a smaller part of the domain
+      - otherwise:
+	- a model that contains everything
+	- too complex to be useful as communication tool
+      - 3 levels of detail, see further
+  - OLTP
+    - what data should be generated/collected?
+  - OLAP
+    - what data do we have?
+    - how to to integrate different data sources to answer the business needs
+      - what transformations
+	- to:
+	  - simpler to understand
+	  - satisfy business needs
+- best practice in building a data warehouse
+  - work backward
+    - what:
+      - go from desired report to business concepts identification
+  - design the new data model explicitly before coding
+    - to:
+      - provide a clear goal
+      - enable analysis
+	- identify
+	  - necessary source data
+	  - required mapping tables
+	  - business rules to go from source to target model
+	    - data lineage
+	- missing info
+      - simplify collaboration
+  - draw models
+    - 1..n 
+    - representing the business concepts
+    - => the target of the transformations
+- good names provides the basic layer of semantics
+- visual model
+  - what:
+    - visual representation
+      - showing how concepts relate
+  - components:
+    - entities
+      - a concept / thing of interest
+    - attributes
+      - a property, with value(s)
+    - relations
+      - connection between 2 entities
+      - types of relations shows how the are related
+	- ownership
+	- purchasing
+- descriptive documentation
+  - what:
+    - wiki
+    - glossary
+  - for:
+    - conveying info on
+      - semantics of entities, attributes
+      - business rules
+    - alignment on meaning of terms
+    - documenting data lineage
+- 3 levels of detail
+  - Conceptual
+    - what:
+      - defines
+	- what is in scope of the domain
+	- important business rules and constraints
+	- naming
+    - created between
+      - data architects and business stakeholders
+    - starting point:
+      - identify the entities in the desired reports
+      - clarify their semantics
+    - not in scope:
+      - technical details
+      - system specific names/attributes
+    - valid in different prj/use cases in the same domain
+      - bc: it describes the reality
+  - Logical
+    - defines what does the data looks like
+      - attributes/properties
+	- IDs
+	  - natural keys NKs
+	  - business keys BKs
+	- key measures
+	- categorizations
+	- reference tables
+      - relations
+	- avoid cardinality changes
+	  - bc: can trigger substantial rework
+	  - how: when in doubt, use most relaxed constraints
+	    - Data Vault methodology always use many-to-many
+      - splitting conceptual entities for implementation
+	- order header, order lines
+  - Physical
+    - defines how is the data stored in the DB
+    - includes
+      - PKs
+      - indexes
+	- search
+	- unicity
+      - join tables
+    - delivering quickly is now more important
+      - bc:
+	- SaaS has
+	  - quasi infinite scalability and performance
+	  - pay-as-you-go
+	  - work well without indexes and unicity constraints
+	- increasing semi-structured data
+- drawing tools
+  - https://ellie.ai
+    - draw conceptual and logical while discussing with business
+    - generates business glossaries
+  - https://sqldbm.com
+    - reverse-engineer models from DB
+- Entity-Relationship modeling
+- semantics
+  - influences cardinality
+  - a Person
+    - uses 1 Passport at a given time to pass customs
+    - has many Passports during his life, with disparate validity periods
+    - has many Passports of different countries at the same time
+  - a Person owns a Car, a Car is owned by a Person
+- identifiers
+  - to: identify an instance of an entity
+  - aka: a key
+  - what
+    - 1..n fields
+  - types
+    - PK primary key ::
+      - ensures unicity
+	- uniquely identifies an instance of an entity
+    - NK natural key ::
+      - has business significance
+	- exists outside the DB world
+    - SK surrogate key ::
+      - to: simplify identification
+	- if PK/NK has multiple fields
+      - no business significance
+      - generated by: a system
+      - ways to generate:
+	- traditional: sequences
+	  - discouraged, has many drawbacks
+	- modern: hash functions
+    - FK foreign key ::
+      - 1..n fields
+      - matches a key in another entity
+- finding out the cardinality
+- OLTP DBs enforce unicity, OLAP DBs not
+  - duplicates are mostly wrong
+    - bad quality/understanding of input data
+  - => to monitor with tests
+- time perspective
+  - historicized tables allow storing multiple versions of the same entity
+    - by:
+      - adding a version ID to the PK
+	- timestamp
+  - !: influences the data model
+    - example: app to manage fleet of taxis
+      - only keeping track of direct operational needs
+	- at a given time
+	- ~Taxi 0..1 - 0..1 Driver~
+      - intermediate entities to keep track of relationships over time
+	- over the whole life of Taxi and Driver
+	- ~1 Driver <- n Workperiod n -> 0..1 Taxi~
+	- entity 'Workperiod' constraints the relation in time to only 1
+    - DWH: usually: adopt a life-time perspective
+      - =: keep track of relationships between entities over their life
+      - even if: the OLTP keeps track of only a 1-1 relation
+	- how: capture changes in the OLTP tables
+- common relation types
+  - generalization & specialization
+    [[./person-car-specialization.jpg]]
+*** modeling use cases & patterns
+**** header-detail
+- example:
+  - invoice - orders
+  - [[./model-pattern_header-detail.jpg]]
+- weak entity ::
+  - has no meaning without the header entity
+  - example: OrderLine
+- implementation
+  - OLTP: 2 tables
+  - OLAP: 1 denormalized table
+**** hierarchical relationships
+- special case of: a One-To-Many relation
+- tree structure
+  - each instance depends on another instance of the same entity type
+    - unless its the highest/biggest level
+- example:
+  - Employee - Manager
+  - Organisational Unit - Company - Group
+    - can have multiple hierarchies
+      - legal ownership
+      - sales org
+  - Category - subcategory
+    - very comman
+    - enables rolling up totals from lower to upper level, by summation
+  - Bill of Materials
+    - represents: parts to make a finished product
+  - Work Breakdown Structure
+    - represents: tasks to complete a prj via sub-projects
+  - Parent - Child
+    - has multiple hierarchical relationship
+     [[./model-pattern_hierarchical.jpg]]
+- implementation:
+  - 1 table
+    - child pointing to parent
+  - 2 tables
+    - first table: represents the entity
+    - second table: represents the relation
+    - like join-tables of a Many-To-Many relation
+    - [[./model-pattern_hierarchical_multiple.jpg]]
+- hierarchy exploration in SQL
+  - with recursive Common Table Expressions
+**** Forecasts and actuals
+- One-To-Many relation
+  - one actual
+  - many forecasts
+- logical model
+  - [[./model-pattern_forecasts-and-actuals.jpg]]
+- physical model
+  - 1 table, with a discriminator column
+*** Libraries of standard data models
+- John Gilles, in his book The Elephant in the Fridge,
+- The Data Model Resource Book by Len Silverston,
+*** Common problems in data models
+**** Fan trap
+
+**** Chasm trap
+*** Modeling styles and architectures
+**** Kimball
+- easy
+- oriented towards: reporting
+- de facto standard for BI tools
+- --:
+  - a lot of rework if business rules change
+    - bc: the data is stored in the model
+**** Unified Star Schema
+- address some shortcomings of Kimball
+- every dimensional model can be refactored to an USS
+**** Inmon
+- the father of data warehousing
+- goal:
+  - a data repository describing the organisation, business processes
+    - corporate-wide, integrated, interoperable
+    - single source of truth
+- approach:
+  - identify business concepts that describe the working of the company
+  - take input source data
+  - transform it to the business concepts
+- data warehouse
+  - stores business concepts
+    - more than: the min. required for the Facts, Dimensions
+    - very close to: Facts or Dimensions
+    - is used to: produce facts, dimensions for a data mart/Kimball star schema
+  - data is normalized in 3NF
+    - to:
+      - minimize redundancy
+      - maximize expressive power
+    - all interesting relations between concepts are captured
+- reports are delivered via data marts
+  - built for specific business area
+- requires
+  - an enterprise-wide effort
+  - commitment from top mgt for extended period of time
+- ++:
+  - very resilient to changes
+    - in:
+      - the business
+      - technical source systems
+    - bc:
+      - founded on enterprise-wide business concepts
+  - has data to answer most business reporting questions
+    - also unforeseen questions
+    - bc:
+      - DWH expresses the company's business processes
+- --:
+  - wide scale
+  - complexity
+  - => requires highly skilled people
+    - data modelers, expert ETL coders, maintainers, data mart updaters
+  - difficult to go back to the original data
+    - bc: data is mainly stored in business concepts
+      - after a lot of
+	- transformations
+	- application of business rules
+**** Data Vault
+- inventor: Dan Linstedt
+- what:
+  - methodology
+  - data platform building
+    - architecture
+    - model
+    - way-of-working methodology
+    - implementation
+- current version: 2.0, 2013
+- keeps evolving
+  - with techn, use cases
+***** DV model
+- central idea
+  - all the info is aggregated around the identified business concepts
+  - data is integrated by the Business Key (BK)
+- cornerstones
+  - concept definition
+  - identity mgt
+- core elements
+  - Hub ::
+    - contains: all unique instances of BK for the concept of the hub
+    - one-to-many relations to Links or Satellites
+  - Link ::
+    - contains: all relations between hubs
+      - one link per unique relation
+    - as: a tuple of BKs
+    - => a flexible mechanism to record all kinds of relations between Hubs
+      - with the same structure
+      - also Many-To-Many relations
+      - allows the cardinality of a relation to evolve easily
+	- without any changes to the model
+  - Satellite ::
+    - contains:
+      - the descriptive info of the concepts
+	- with the changes over time
+- provides:
+  - specialized versions of these core elements
+    - for: use in specific situations
+  - point-in-time tables
+  - bridge tables
+- example model
+  - [[./data-vault-example.jpg]]
+- requires elevated level of training in data modeling
+  - to: avoid possible pitfalls
+    - example: creating source-centered DVs
+      - instead of business-centric ones
+***** DV architecture
+- [[./data-vault-architecture.jpg]]
+- staging tables
+  - don't alter the incoming data
+    - incoming data:
+      - reference data
+      - source system data
+      - master data
+    - don't alter:
+      - keeping the good, bad and ugly
+    - only apply hard business rules
+      - align data types
+      - add metadata
+      - apply normalization
+    - to:
+      - enable auditing what came from the source data
+- data vault
+  - stores the data from staging according to DV model
+    - according to the DV model:
+      - integrated, organized by business concept, using BKs
+    - data is very much like the source data
+      - not modified
+      - => auditable
+      - => enables recalculation according to new business rules
+  - DV is the only place that keeps all history forever
+  - load process
+    - automated
+    - highly parallel
+    - often automatically generated
+    - => speedy delivery, correctness
+- Business Vault (BV)
+  - applies the business rules
+    - the most specific part ot the data platform
+      - varies in every use case
+  - steps
+    - takes the org data
+    - applies all bus.rules
+    - produces refined version of the bus.concepts
+    - takes required data from the DV and BV
+    - produces data marts
+- data marts
+  - organized according to Kimball star schema / USS
+***** pro's
+- reduced rework when
+  - adding/changing
+    - data source
+    - bus. rule
+  - bc:
+    - separating the storage
+      - of historical data
+      - from the application of business rules
+    - => every part of the architecture has only 1 reason to change
+- loading logic can be
+  - automated
+  - automatically generated (most)
+  - bc:
+    - standardized 3 core elements (Hub, Link, Sattelite)
+- allows parallel ETL processing
+  - bc:
+    - no need for SK lookups
+      - bc:
+	- use of: BKs
+	- instead of: Surrogate Keys generated with sequences
+- simplified and automated loading
+  - by: checking changes
+    - between: instances of an entity
+    - using: Hashed Difference fields
+      - HashDIFF
+- loading patterns that use the scalability of cloud platforms
+  - insert only queries
+    - to: store/update complete and auditable history
+  - enables manipulation of millions of rows
+- able to handle bi-temporality
+  - bi-temporality
+    - when something happened
+    - when we got that info
+  - important in some context
+    - compliance departments
+***** con's
+- creation requires 
+  - data professionals skilled/trained in DV2
+  - thorough analysis of business concepts
+  - experts on the business side
+  - sponsorship at high level
+  - coordinator
+- collate all data requires many joins
+  - difficult for most devs
+  - out of reach for analysts and bus. users
+***** summary
+- best of previous designs
+  - like Inmon: business concepts at the core
+  - uses Kimball star schema for ease-of-use data marts for user of BI tools
+- adds improvements
+  - preserves original data
+  - separates storage of source data from appl. of bus.rules
+    - decouples the building from maintaining the data platform
+- => attractive choice
+  - where
+    - size & complexity of the development
+  - justifies
+    - the availabilty of
+      - highly skilled people
+      - high-level sponsorship
+***** dbt supports DV2.0 methodology
+- open source lib: dbtvault
+**** Data Mesh
+- to:
+  - address the problem of "data ownership"
+    - builders of the enterprise-wide data platform
+      - don't know the
+	- source data
+	- business
+      - receive weak support of the several
+	- OLTP teams
+	- business departments
+    - nobody is the end-to-end owner of the data generated
+      - by OLTPs systems
+      - of a specific business domain
+    - no common definitions in diff. company departments
+      - semantics of concepts differ slightly
+      - test:
+	- ask: "what is the definition of a customer?"
+    - => result is mediocre
+  - root problem:
+    - different tech teams that manage
+      - source systems
+      - data platforms
+    - goals of IT and business are not aligned 
+- solution:
+  - same approach as in application software delivery:
+    - data platform
+      - not: 1 monolithical, centralized service and team
+      - distributed services and teams
+      - parts are interact via services
+    - DevOps way of working
+      - not:
+	- trying to build a enterprise-wide, unified, centralized data platform
+      - data is a product/service built by business unit scale
+	- by same team that runs the OLTP systems of the business unit
+	  - they have
+	    - E2E control to the
+	      - data
+	      - semantics
+	      - bus.knowledge
+	    - incentive to keep the business products running
+      - => data ownership by the business unit
+    - microservice architecture
+      - a DWH is a microservice
+	- interacts though interfaces
+	  - well-defined
+	  - with clear semantics
+	  - maintained by another team
+    - thinking in "data products"
+      - data is a service
+      - examples:
+	- application allowing doing something using data that you don't have
+	  - example:
+	    - verification that a customer is active or authz to place an order of some amount
+	    - estimate the house value
+	    - calculate a quote for a car insurance
+	- interface to data with a clear semantic
+	  - example:
+	    - marketing department -> recent customer actions and touchpoints
+	    - production site -> the status of an assembly line
+	    - logistics department -> distance, fuel consumption, CO2 produced by trucks/deliveries
+	- a data mart
+- --:
+  - distributed systems are much more complex
+  - requires skills to
+    - manage agile projects
+    - reliable APIs
+    - maintain many distributed data pipelines
+- dbt allows
+  - having multiple dbt prj interacting through clear APIs
+  - company-wide delivery of powerful documentation on
+    - data lineage
+    - data model
+    - data semantics
+**** Pragmatic Data Platform
+- skipping the parts that increase the requirements without strong benefits
+- DV approach
+  - separating ingestion <> application of business rules
+  - pattern-based, insert-only ingestion of the full history
+  - hashes
+- data should be organized according to the bus.concepts of the domain
+- clear BK definitions
+  - identity mgt
+- skipping DV modeling
+  - complex, unknown
+  - => less resilient to changes
+    - acceptiable compromise
+- deliver data through data marts containing a few star schemas
+  - sometimes wide denormalized tables
+    - i.e. for Google data studio, ML/AI
+
+** 4: analytics engineering as the new core of Data Engineering
+*** Data Life Cycle / Data Flow
+1. data creation
+   - during company operations
+     - work-related things happening
+   - raw data ::
+   - types of source systems:
+     - operational systems
+       - ERP software
+       - Excel files
+     - production systems:
+       - IoT systems monitoring production sites
+     - online systems
+       - web sites
+       - marketing sites
+       - requires: sofisticated analysis tools, ML
+	 - to: understand, predict user
+   - speed and level of structure of the data determines how data can be moved
+2. data movement & storage
+   - from: multiple sources
+   - to: a data platform
+   - to: be analyzed
+   - historical data ::
+     - with the desired time dept
+3. data transformation
+   - goal: produce integrated, meaningful, easy-to-consume information for bus.users
+     - here is value added
+   - refinded data ::
+4. consumption by business users
+   - access to pre-build reports
+     - most common interface
+     - build with: reporting tools
+   - self-service reporting
+     - for power users
+5. data write back
+   - business users / ML produce data
+     - by interact with the data in reporting tools
+   - that data is fed back to the data platform
+**** Data Mesh differences
+- steps 2 and 3
+  - bc:
+    - no central system
+    - different scope
+*** Extraction 
+- standard tools:
+  - Fivetran, Stich, Supermetircs
+- custom
+  - to decide: how to extract, move, store
+**** external observable or not?
+- if data source provides external observability
+  - =:
+    - observable without needing to know the system internals
+    - system publishes its changes
+      - a queue
+  - => no risk to lose data changes
+- otherwise
+  - interpretation can be difficult
+    - bc: business logic 
+    - example:
+      - deletes
+      - subsequent changes/statusses overwrites themselves
+      - => we miss intermediate steps
+**** types
+***** event-based observability
+- system publishes the interesting changes
+  - data change events
+  - business events
+    - examples
+      - order created
+      - payment accepted
+    - has meaning in a business process
+- =>
+  - important intermediate steps are not lost
+  - no logical inconsistencies
+***** change data capture
+- =: connected to an event stream of the source system
+  - DB log
+- =>
+  - intermediate steps are not lost
+  - interpretation can be complicated
+    - internal tables not designed to be accessed externally
+  - data can be inconsistent
+***** API
+- !: quality of the API design
+  - in the JSON we need keys of the different nested entities
+    - JSON <> SQL
+      - JSON/XML nested structures
+	- the relation comes from the nesting
+      - SQL tables are flat
+***** database snapshot
+- =: export of source system at specific time
+  - full / incremental
+- problems
+  - intermediate changes can not be observed
+  - data can be inconsistent
+  - deletions only trackable if we have full exports
+*** Temporary storage of extracted data
+- extracted data is transferred to
+  - permanent storage in the data platform directly
+    - in:
+      - tables or files of data lake
+    - ++:
+      - simple, clean
+  - intermediate storage
+    - bc:
+      - allow multiple attempts to move
+	- without needing to extract again
+	- 'data move' tool != 'data extract' tool
+	  - this is now less common
+	    - cloud SaaS
+    - in:
+      - files
+      - queueing systems
+	- Kafka
+	- common if:
+	  - source system provides observability
+	    - sending messages
+	      - state
+	      - events
+	  - IoT
+*** Data movement between source system and data platform
+**** how the data movement is coded
+- data movement tools
+  - avoids having to learn APIs
+  - easy to configure
+  - target users
+    - non-tech:
+      - Fivetran, Supermetrics, Funnel
+    - IT teams
+      - Stitch
+- ETL / data science tools
+  - ETL:
+    - Matillion, Talend, Informatica
+  - data science:
+    - Alteryx, Dataiku
+  - code/draw transformations
+- direct coding
+  - java, python, shell, perl, ftp, ...
+**** what happens with the data in transit
+- ETL
+  - =: data is transformed duing movement
+  - old school
+    - was reasonable when
+      - data is limited
+      - DB resources are limited
+	- speed
+	- memory
+	- storage
+- ELT 
+  - =: data remains unaltered during the move
+  - modern way
+  - new paradigm
+    - making full use of powerful modern DBs
+      - huge memory
+      - unlimited storage
+      - linear scalability
+- best practice
+  - no modifications during movement
+    - perserve original data
+    - apply no business rules
+      - bus. rules changes over time
+    - ++:
+      - easy
+      - quick
+      - auditable
+      - no interpretation errors
+
+*** Initial and permanent storage in the data platform
+- to:
+  - make extracted data accessible to your data platform
+- locations:
+  - files
+    - go-to choice for
+      - semi-structured
+	- XML, JSON
+      - unstructured data
+	- images, video, text documents
+      - logs
+    - SQL has little use for it
+    - the 'data lake' approach
+      - lack of fixed structure
+      - vast amounts of data
+	- modern cloud DBs
+	  - can keep data at comparable prices
+	  - also use these file technology
+	  - can manage semi-structured data
+	    - => better for working with DBT
+  - database
+    - go-to-choice for
+      - structured data
+      - meta data on data stored in files
+- initial storage <> permanent storage
+**** initial storage
+- from:
+  - source system
+- name:
+  - "landing"
+- unchanged, as retrieved from source
+- not full history of the source
+  - current state 
+    - full export
+      - snapshot
+    - incremental/delta export
+**** permanent storage
+- =: all the info that you want to store forever
+  - the history of changes in your entities
+- what to put in the permanent storage
+  - raw data <> refined/transformed data
+  - source data
+    - format:
+      - very close to the format it arrives on the data platform
+	- no transformation
+	- no application of bus.rules
+    - storage layer name:
+      - "core warehouse", "raw data vault", "persistent staging", "history layer"
+    - approaches
+      - Inmon-style
+	- in 3NF
+	  - to:
+	    - avoid redundancy
+	    - keeping all info and relations
+      - Data Vault
+	- as raw as possible
+	  - for: auditability
+	- organized by business concept
+	  - passive integration centered around well-defined bus.keys
+	    - stored in the same hub
+	    - even if from different systems
+      - pragmatic approach
+	- store data in same form as it comes from source systems
+	  - preserving data and relations
+	  - explicitly identifying BKs
+	    - = NKs
+	    - will be used in next layers
+	      - to: integrate systems
+  - refined data
+    - Kimball
+      - transform incoming data into Facts and conformed Dimensions
+	- applying business rules
+      - -> not adviced
+	- what exactly:
+	  - using Facts and Dimensions as main data store
+	- bc:
+	  - Facts and Dimensions ca be far from original data
+	    - changed multiple times
+	      - by: many, complex business rules
+	  - => difficult/impossible to go back to original data 
+	    - in case of
+	      - errors
+	      - change in business rules
+    - Roberto Zagni
+      1. keep raw/as-is
+	 - this will probably not be in the correct format for reporting
+      2. identify
+	 - concepts
+	   - clear naming
+	   - example: customer, document
+	   - has: features
+	 - their identity
+	   - what:
+	     - know how to distinguish whether 2 instances are
+	       - 2 versions of the same concept
+	       - 2 separate entities
+	   - by:
+	     - testing PKs and BKs
+	 - their way of changing
+      3. => able to keep history
+	 
+*** data transformation
+- dbt is for transforming data
+**** 2 transformation steps
+***** storage transformations
+ - =: making the landed data ready for persistent history
+ - changing column names to businss names
+ - technical transformations only:
+   - change format
+     - text to numbers/dates
+     - remove padding zeroes/spaces
+   - adding metadata
+   - adding calculated fields
+     - hash key
+     - hash DIFF key
+ - original source data must be preserved
+ - straightforward job
+***** master data and business rules transformations
+- transforming historical data -> data ready for reporting
+  - master data mappings
+  - business rules
+- the creative job
+  - apply best practices, guidelines, experience
+  - find solutions
+  - avoid dead-ends
+**** obsolete traditional DWH practices
+ - thanks to powerful and cheap cloud platforms
+***** use of surrogate keys build with sequences
+ - context:
+   - old database were
+     - better at handling numeric keys
+     - not able to work in parallel
+   - current cloud DBs:
+     - no diff on key type
+     - very parallel
+ - --:
+   - sequences kill parallelism
+     - during generation
+     - during look ups
+ - => use natural BKs or SKs based on hashing
+***** incremental loads
+ - --:
+   - complexity >> simple query that provides the transformation
+     - depends on state
+       - the history that happened befor the current execution
+     - => after failures you must fix the data
+       - or inconsistent data will be build over the not-fixed data
+ - context
+   - back then:
+     - DBs
+       - were costly
+       - had no parallelism
+     - =>
+       - speed was constrained
+       - DB could not handle all data at once
+     - => incremental loads
+       - works on less data at once
+     - => complexity
+   - now:
+     - powerful cloud platforms
+     - => ability to avoid incremental loads
+     - => simpler transformations
+       - quicker
+       - not dependent on previous run
+     - =>
+       - easier to understand
+       - fewer errors
+       - less maintenance
+
+*** Business Reporting
+- goal of data platform:
+  - deliver refined data
+  - => insight
+  - => good decisions
+- 2 main use case
+  - classical business reporting
+    - =: source data + application of bus.rules
+  - advanced analytics
+    - =: insights generated by ML or AI
+- data delivery /presentation / report layer
+  - de facto: Facts and Dimensions, Kimball style
+    - works for users and ML/AI
+- how:
+  - 1 general refined layer
+    - tables storing the result of
+      - applying master data
+      - general bus.rules
+    - to: avoid rework, increase consistency
+  - 1..n data marts
+    - per: reporting domain
+      - sometimes: per geography/country
+    - =: collection of views that read from the refined layer
+      - adding specific bus.rules for the reporting domain
+    - delivering desired Facts and Dimensions
+    - reporting domains:
+      - marketing
+      - purchases
+- ML, AI
+  - can use the full history or the refined data
+  - produce more refined data
+    - that can be added to the data marts
+
+*** Feeding back to the source
+- common use cases
+  - in marketing/CRM:
+    1. calculate some data in the data platform
+       - example: customer segment data
+    2. feed it back to marketing/CRM tool
+  - ML model builds data valuable for OLTP
+    - sales forecasts
+    - predictive maintenance data
+  - BI users edit data in reports in the BI tool
+    - "write-back" feature of BI tools
+    - to:
+      - enter missing info
+      - provide updated values
+	- inventory levels
+	- forecasts
+    - => treat this new data as
+      - new input for the data platform
+	- => integrate it in the data pipeline
+	  - => enable reproduction of the final result from scratch
+	    - without dealing with previous state
+      - instead of: updating the data mart directly
+- move the data in the target system
+  - via its API
+  - reverse ETL tools
+    - census.com
+*** Modern Data Stack
+**** traditional data stack
+- manual ETL pipeline creation
+  - ad hoc integration
+  - extraction logic
+- row-oriented DBs
+- problematic compromises
+  - before loading
+    - application of bus.rules
+    - summarization of data
+  - => any change affects the whole history of data
+    - in source data 
+    - in bus.rules
+  - => requires a fix in
+    - transformation logic
+    - existing data
+      - scary to change: your only copy of historical data
+- size, power of tools, time to write ETLs were limited
+  - =>
+    - only really needed data was loaded
+    - retained limited periods of time
+- if data was summarized too much, new ETL pipeline was necessary
+- division of work between data engineers and analysts
+  - => difficult to
+    - analyst: develop good understanding of the data and its limitation
+    - data engineer: understand the use and quality of delivered data 
+- no tests/QA
+  - => continuous firefighting
+    - changing/missing data at source systems
+    - stale/bad data in reports
+- technical difficulties to keep ETL pipelines working + distance between data engineers and business questions
+  - =>
+    - focus on making data flow
+      - instead of
+	- understanding data
+	- QA
+    - bc: data flowing or not is undisputable fact
+**** modern data stack 
+- affordable analytical DWH in the cloud
+- => huge storage & processing power without the need to buy upfront
+- => emergence of commercial data movement tools
+- => quick and easy data movement/integration with common DBs and SaaS business platforms to cloud DWH
+  - Stich, Fivetran
+  - only need to create ad hoc pipelines as a last resort
+    - when no tool exist to automate it
+- improved self-service reporting
+  - by: modern BI tools
+- shift:
+  - as little as possible logic into reporting tools
+    - keeping it in the DWH
+    - => available for every report or other use case
+  - bc:
+    - less time spent on programming and infrastructure, more on SQL & DW skills
+    - dbt: easy writing & testing business logic in transformations
+*** data engineering
+- integrating existing data
+- store
+- make available
+- distilling info
+  - without
+    - losing org. info
+    - adding noise
+- =: transforms raw data
+  - from: disparated data sources
+  - into: info ready for use
+    - with: tools that analysts and businses people use
+  - to:
+    - derive insights
+    - support data-drive decisions
+
+*** analytics engineering
+**** 2 revolutions
+1. more focus on managing raw data, refining it for business reports
+   - bc: much less on data movement
+     - custom integrations/ETL pipelines
+   - bc: modern data stack
+2. tools enable working in team
+   - => focus on SE best practices
+     - reliable data transformation development
+       - DataOps
+**** 3 phases
+- aliged with modern tools
+- data integration ::
+  - =: collecting and centralizing all data
+- analytics engineering ::
+  - =: transforming raw data into refined, usable, trusted data
+  - better: 
+    - data refining :: 
+- data analysis ::
+  - =: building reports, dashboards, ML models, ...
+    - using the refined data
+    - in BI tools
+**** consequences on roles in data team
+- data engineer ::
+  - scripting/coding
+  - complex scheduling
+  - infrastructure knowledge
+  - security
+- analytics engineer ::
+  - transforming raw data into useful info
+    - understands the raw data
+    - knows how to create datasets for analysis
+  - making data available, usable, trusted
+- data analyst ::
+  - understands & creates data models
+  - able to investigate datasets
+- better:
+  - data integrator -> refiner -> analyser
+*** best practices: DataOps
+- compose complex datasets using modular models
+  - general-purpose models
+  - reusable models
+- build modular models
+- organize transformations and their dependencies
+  - separation of concerns
+    - to: minimize the need of changing a component (= model)
+  - clear naming
+    - to: enable team-work
+- DevOps ::
+  - goal:
+    - productivity
+    - job satisfaction
+  - provide teams
+    - tools
+    - authority
+    - responsibility
+    - for:
+      - all of the development cycle
+	- coding
+	- QA
+	- releasing
+	- running production operations
+  - cornerstone
+    - freedom <- responsibility <- ownership
+    - automation
+      - releases
+      - testing
+      - proactive monitoring
+    - shared ownership
+    - QA by 4-eyes-principle
+      - pair programming
+      - MRs
+      - code walkthroughs
+    - Boy Scout Rule
+    - active mgt of tech debt
+      - repair tech debt
+*** SE best practices
+**** version control
+- distributed
+- central repository
+- branching
+  - enables:
+    - parallel development
+    - incremental development
+      - safe experimenting
+- enables other positive processes:
+  - integration hub
+  - collaboration
+    - MR review, clarifications, proposals
+  - automation
+    - QA/CI/CD
+  - authorization
+    - approvals
+**** automated tests
+- running on
+  - new data load
+  - new code integrated
+- => trust
+- => customers
+- => data-centric organisation
+**** reusable models
+- avoids: code repetition
+- requires: business and tech to align on bus.concepts
+  - example: customer
+- what:
+  - composable code
+    - example: online customer, store customer, wholesale customer
+  - modular
+    - =: stable interfaces
+- enabled by:
+  - modern stack
+    - functions (= encapsulate reusable code)
+    - conditionals, loops, meta-programming
+    - focus on good bus.logic
+      - by: reduction of boiler plate code
+    - reducing complexity
+      - by: reducing incremental loads
+    - transforming massive amounts of data
+      - cloud DW -> // performance + scalability
+**** personal dev environments
+- to:
+  - enable focus on developing good code
+    - instead of
+      - side-tasks
+      - waiting
+  - avoid the need for testing in PRD
+  - enable fast development of new functionality
+- what:
+  - an env that
+    - is identical to PRD
+      - cheap
+      - fast
+    - enables every developer to develop, test, iterate without
+      - needing to wait
+      - fear of breaking something
+    - can be broken & re-created quickly
+      - to: avoid 'maintenance' effort on a (shared) env
+**** CI
+**** CD
+*** designing for maintainability
+- why:
+  - data platforms are longest-living enterprise applications
+  - => requires ability
+    - to change
+      - data sources
+      - bus.rules
+    - to answer questions (documentation)
+- what: 
+  - easy to change
+  - easy to understand
+    - => easy to test
+      - => easy to change
+  - well documented
+    - findable
+    - up to date
+    - relevant
+- how:
+  - concrete:
+    - break complex long queries up in its logical steps
+      - using:
+	- CTE with proper names
+    - models < 100 lines
+    - #joins < 2-3
+      - unless:
+	- the model has the single purpose to join many tables
+    - encapsulate columns of a big table
+      - using:
+	- views
+    - define & adopt simple conventions that enables
+      - finding a model
+      - understanding a model
+  - principles:
+    - Single Responsibility Principle ::
+      - a model should have only 1 reason to change
+      - => it will do only 1 thing
+      - => it will be easy to understand
+    - Open Closed Principle ::
+      - =:
+	- stable interfaces
+	  - open for extension
+	  - closed for modification
+      - how:
+	- use good names
+	- use views
+	  - to: insulate implementation details
+    - Interface Segregation Principle ::
+      - what:
+	- a client should not depend upon an interface that it does not use
+      - how:
+	- don't use a customer Dimension with 100+ columns
+	- use a view to only the required info
+      - to:
+	- limit the blast radius
+    - Least Surprise Principle ::
+      - =:
+	- a model should do what seems obvious
+	  - given its:
+	    - name
+	    - position in the prj
+	- you should be able to guess correctly what it does
+	  - not: be surprised while reading its code
+      - otherwise:
+	- you can not trust/reuse the code
+	  - without re-reading it
+      - example
+	- not:
+	  - a view in a data mart that reads from raw data source
+	  - a model that applies master data mapping also calculates some unrelated metric
+- how to document
+  - generated
+    - technical details that change often:
+      - models
+      - their connections
+    - not manually, bc:
+      - obsolete very quickly => misleading
+  - manually
+    - descriptions of
+      - fields
+      - models
+      - a report
+      - a dashboard
+    - high-level architecture
+
+** architecture Railtel
+- initial storage layer
+  - "landed data"
+  - raw data
+  - stores data on the platform
+- permanent storage layer
+  - "historical source data"
+  - "historical refined data"
+- data delivery layer
+  - "general refined data"
+    - tables storing the result of
+      - applying master data
+      - general bus.rules
+    - to: avoid rework, increase consistency
+    - ready for data marts, ML, AI
+  - data mart
+    - "specific refined data"
+    - per: reporting domain
+      - per RU
+	- a reader roles
+	  - restricted to one data mart
+        - assigning these reader roles to the users that may access that data mart
+      - sometimes per: geography/country
+    - delivering desired Facts and Dimensions
+    - =: collection of views that read from the refined layer
+      - adding specific bus.rules for the reporting domain
+** 5: transforming data with DBT
+*** Zagni architecture
+**** layers of a modern data platform
+- [[./dbt-layers-of-modern-data-platform.jpg]]
+- data sources
+- data storage
+  - read data sources
+  - format for permanent storage
+    - minimal transformations
+      - data type conversions
+	- text -> numbers/dates
+      - remove padding zeros/spaces
+      - time zone conversions
+      - objects (JSON, AVRO) -> SQL data structures
+	- ex: invoice -> invoice header, invoice row
+  - track changes in the source data
+- data refinement
+  - =:
+    - turning raw data into useful info
+  - how:
+    - applying Master Data
+      - to:
+	- convert source-system-specific data -> enterprise-wide usable data
+    - applying Business Rules
+      - to:
+	- transform data into usable info
+      - !:
+	- create reusable models
+	  - <> spaghetti of ad-hoc transformations
+- data delivery
+  - traditional reporting data marts
+    - dimensional model
+    - for: BI tools
+  - wide tables data marts
+  - data marts for AI/ML
+    - providing:
+      - APIs for external tools
+	- simple to build/manage
+  - data that is written back
+**** key feature
+- separated
+  - source data ingestion
+  - application of bus.logic & creation of bus.concepts
+**** ++:
+- decoupling of the major activities
+  - ingesting
+  - building bus.concepts
+  - =>
+    - simplified development
+      - bc:
+	- able to use best solution for each part
+- extensive use of patterns
+  - =>
+    - quicker dev
+    - minimized complexity
+    - reliable outcome
+    - predicatable delivery times
+- preserved source data
+  - => 
+    - auditable
+    - enables advanced source system analysis
+    - always usable data
+      - bc: not changed
+- well-organinzed refined layer
+  - simple MD mgt playbook
+    - => oriented dependencies are easy to navigate
+  - few recurrent model types with clear roles
+    - => complexity--, maintainability++
+- refined data and data delivery layers are constantly recreated
+  - from:
+    - stored histocial source data
+  - =>
+    - always up to date with MD and BR
+    - easy changeable MD and BR
+      - immediately deployed to all data
+  - =: stateless
+    - =>
+      - developer confidence++
+	- simple to change
+	  - no need to preserve/maintain complex state
+      - maintainability++
+- easy creation of data marts
+  - bc:
+    - separated from refined layer that is always up to date with MD & BR
+  - => able to 
+    - simple data mart personalization
+    - limit access to the smalles possible surface
+      - by: creating a new data mart
+    - incremental development of DMs
+- external dependencies are easily managed
+  - with:
+    - simple DB constructs:
+      - users, roles, schema, views
+**** compared to traditional warehousing
+- focused on: delivery of DMs
+- no separation of concerns
+  - historical source data
+    - minimal transformation
+    - auditable
+  - historical refined data
+    - constantly recreated
+    - stateless transformations
+    - =>
+      - easy change of MD and BR
+  - general refined data
+    - constantly recreated
+  - use case specific DM
+    - constantly recreated
+    - access can be restricted to minimum
+      - bc: easily created
+- =>
+  - less iterative development
+    - only reuse of Confirmed Dimensions
+*** sample application
+- simple stock tracking data platform
+- building incrementally
+  - start:
+    - current value of the portfolio
+- concepts, glossary
+  - portfolio, at broker, positions in securities, quote
+- project design 
+**** setup
+- dbt
+  - snowflake account: vigbmpq-ed54024
+  - db: PORTFOLIO_TRACKING
+  - warehouse: COMPUTE_WH
+  - role: DBT_EXECUTOR_ROLE
+  - username: jerome
+  - target: dev
+  - schema: dbt_jehout
+- github
+  - account: jehout
+  - repository: portfolio-tracking-dbt
+    - don't forget to allow dbt-cloud the access to the new github repo
+      - this is done
+	- in dbt: via a link: profile > configure integration with GitHub
+	- in github: account (jehout) > integrations > Applications 
+*** typical deployment setup
+- environments
+  - one DEV database
+  - a Quality Assurance (QA) or Continuous Integration (CI) environment
+  - PROD db
+- branches
+  - main
+    - where developments are merged
+    - associated with QA environment
+  - prod
+    - associated with PROD environment
+  - other branches for other environments
+    - release candidates
+- roles
+  - DBT_EXECUTOR:
+    - runs dbt
+    - granted: creating the schemata in DB Portfolio-Tracking
+  - another role to create the DB
+    - to: avoid that dbt can drop the full DB
+- users
+  - DEV: our user
+  - PROD: a new user
+  - both have role DBT_EXECUTOR
+- normally
+  - each env/db
+    - 1 writerRole
+    - 1..n readerRole
+  - you only allow changes in non-DEV envs to the DBT-role
+    - acting on manual commands from the developer
+    - how:
+      - developers get only writerRole for DEV, readerRoles to other envs
+  - you control and manage the delivery of your data
+    - how:
+      - create reader roles restricted to one data mart
+      - assigning these reader roles to the users that may access the data mart
+*** 2 ways to define input
+- source ::
+  - =: or
+    - external system
+    - data managed by another dbt project
+  - declared as metadata in a .yaml
+- seeds ::
+  - =:
+    - csv files in a folder
+  - can be loaded by dbt
+    - ~dbt seed~
+- =>
+  - dbt prj dependencies
+    - are defined
+    - can be managed
+      - declare a data refreshness SLA
+      - tests on incoming data
+      - change external data location flexibly
+      - visualized
+**** understanding seeds
+ - =:
+   - a utility tool
+ - to:
+   - load seed data
+ - seed data:
+   - small
+     - 100 à 5000 lines
+     - not: high amounds of data
+       - bc:
+	 - it will load slowly
+	 - every version will be in git
+       - loads that are only useful in the prj
+	 - not in different place
+   - changes infrequently
+   - generally maintained by hand
+   - suitable/required to be versioned in git to track changes
+     - suitable:
+       - contains no sensitive information
+       - bc: exposed forever in clear in the repo
+   - examples:
+     - test users
+     - sample products
+     - ref data
+       - country codes -> names, stats
+       - currency codes -> names
+       - user codes -> internal employee codes
+ - how:
+   1. configure in the main configuration file
+      - the location of the file
+	- ~seed-paths: ["seeds"]~
+      - column names & data types
+      - define tests
+      - -> dbt is metadata driven
+	- defining properties & configs
+	  - in .yaml
+   2. put the file in the location
+   3. run ~dbt seed~
+ - default behavior
+   - loaded in table with same name as the csv file
+   - data types are infered by dbt and db
+ - access generate tables
+   - use ~ref~
+*** best practices
+**** use "source" and "ref" references
+- instead of: using direct names to db tables
+- bc:
+  - impossible for dbt to
+    - run the project in correct order
+    - trace and visualize dependencies
+      - lineage
+    - work on diff envs
+    - generate documentation
+  - it removes the flexibility in your code
+**** start transformations from a DB object defined as a Source
+***** let dbt access external data in a DB
+ - how:
+   1. make all external data from a specific system available inside a schema of a DB
+   2. let dbt identify & read from it
+      - db, schema -> Source System
+      - tables, views -> Source Table
+ - format:
+   #+BEGIN_SRC
+   sources:
+   - name: <source system name, will be used in the 'source' function>
+     database: <db name>
+     schema: <schema name>
+     description: <some description of the system>
+     freshness: # system level freshness SLA
+       warn_after: {count: 12, period: hour}
+       error_after: {count: 24, period: hour}
+     loaded_at_field: <default timestamp field>
+     tables:
+       - name: <name we want to use for the source table/view>
+         identifier: <name in the target database>
+         description: source table description
+   #+END_SRC
+***** use a landing table to load files
+ - the landing table can be the/a source for the ELT
+ - if the file location changes, the ELT can still read the landing table as source
+ - how:
+   1. load the raw data
+      - from:
+	- the file
+	- a non-native SQL data source
+      - into: the landing table
+      - before: the actual ~dbt run~
+      - how:
+	- ~dbt run-operation~ that invokes a macro executing the DB command
+	  - e.g. COPY INTO
+   2. define the landing table as a Source table
+      - => when dbt runs, it runs from
+	- the landing table
+	- not: from the files
+***** use dbt to manage resource creation/ setup time queries
+ - with: ~dbt run-operation~
+ - define a source on the results
+ - => usable for SQL transformations with DBT
+**** snowflake: use a FileFormat for loading files
+- to: specify how the file must be read
+- ++: reusable
+- how-to create a File Format in Snowflake:
+  #+BEGIN_SRC sql
+CREATE FILE FORMAT
+  PORTFOLIO_TRACKING.SOURCE_DATA.ABC_BANK_CSV_FILE_FORMAT
+    TYPE = 'CSV'
+        COMPRESSION = 'AUTO'
+        FIELD_DELIMITER = ','
+        RECORD_DELIMITER = '\n'
+        SKIP_HEADER = 1
+        FIELD_OPTIONALLY_ENCLOSED_BY = '\042'
+        TRIM_SPACE = FALSE
+        ERROR_ON_COLUMN_COUNT_MISMATCH = TRUE
+        ESCAPE = 'NONE'
+        ESCAPE_UNENCLOSED_FIELD = '\134'
+        DATE_FORMAT = 'AUTO'
+        TIMESTAMP_FORMAT = 'AUTO'
+        NULL_IF = ('\\N')
+;  
+  #+END_SRC
+**** define a different YAML file for each source system
+- to:
+  - conjugate project order
+  - ease of editing
+  - avoid many merge conflicts
+**** naming of models and other objects
+- context:
+  - snowflake
+    - is case-INsensitive
+    - shows all in uppercase
+  - dbt
+    - is case-sensitive
+- convention:
+  - model names: uppercase
+    - =>
+      - is same as shown in Snowflake UI
+      - copy/paste works
+  - other obj: lowercase
+**** only manually manage your own dev env
+- once it is release to other envs, use an automated approach
+  - write the SQL in a dbt macro
+  - run command ~dbt run-operation~ to execute them
+**** create a schema for each data mart
+**** tables or view?
+- tables
+  - slower to load
+  - take space
+  - faster to query
+- views
+  - slower to query
+  - no space
+  - no cost to load
+- =>
+  - tables
+    - queries that are performed multiple times dufing the ELT
+      - => calculations are done only once
+    - models queried by end users in interactive mode
+      - => as fast as possible
+  - views
+    - models that are queried by BI tools that load the data internally
+      - e.g. Power BI
+**** create DBs with another role than DBT
+- to: avoid DBT can drop the DB
+**** for each data mart, create a role with Read access 
+*** how dbt composes the schema name from target.schema & custom.schema
+- what:
+  - a schema name is composed of 2 parts
+- format:
+  - <target_schema>_<custom_schema>
+- to:
+  - create unique namespaces
+    - ==: avoid name clashes among diff developers and diff environments
+- examples:
+  - JEH_REFINED, DAV_REFINED
+  - ACC_REFINED, PROD_REFINED
+- configured in:
+  - target schema
+    - the connection details of the environment
+  - custom schema
+    - the main dbt config file
+- how-to use target schema in scripts:
+  - ~{{ target.schema }}~
+
+*** using dbt, workflow
+- define your models
+  - in:
+    - the main config file
+      - =:	
+        - dbt_project.yml
+      - content:
+	- where to find objects (eg. models) in the folder hierarchy
+	- how to materialize them
+	  - table or view
+	- in which Custom Schema
+    - in the hierarchy specified in the dbt_project.yml
+      - in .sql
+	- the content of the models
+	  - columns, types, ...
+	- as a SELECT
+	  - not: CREATE TABLE/VIEW
+	  - with ~{{source()}}~
+      - in .yml
+	- metadata
+	  - column descriptions
+	  - tests
+- to deploy the code
+  - in your DEV env
+    - execute manually: ~dbt run~
+    - can be done iteratively
+      - one model at a time
+      - change
+  - in other env
+    - use a dbt Job
+      - =:
+	- a sequence of dbt commands
+      - you can define multiple jobs for each env
+	- eg
+	  - 1 that runs everything
+	  - 1 that loads data hourly and refreshes downstream
+    - use dbt macros
+- remember: dbt will never delete tables or views
+  - unless necessary, eg
+    - changing materialization from view to table
+  - to:
+    - safeguard your data
+  - => you are responsible to do the destructive actions
+- so:
+  - often you completely drop your dev schema, and re-run dbt
+  - to:
+    - create a clean new env after iterative changes
+      - remove obsolete objects
+*** data warehouse structure
+- landing/source table 
+  - ingestion
+- STAGING
+  - adapter table: view on the source table
+  - history tables
+    - incrementally loaded
+- REFINED
+*** data lineage
+- drawn in real-time
+- clickable to navigate to source/model definitions
+*** dbt snapshots
+- are
+  - global
+    - =: every environment uses the same snapshot
+    - <> history tables
+      - are individual to each env
+  - tables
+  - loaded incrementally
+*** ensuring data quality with tests
+**** 2 types of test in dbt
+- generic tests ::
+  - codified in: a parametrized query
+  - examples:
+    - column
+      - is not null
+      - has unique values
+- singular tests ::
+  - for: special cases
+  - most flexible
+  - codified in:
+    - a SQL query that returns rows that do not pass your test
+  - examples:
+    - individual calculations
+    - full table matches
+    - subsets fo columns in multiple tables
+  - stored in:
+    - folder 'test'
+**** out-of-the-box tests:
+- dbt
+  - not_null ::
+  - unique ::
+  - relationships ::
+    - tests: ref.integrity between 2 tables
+      - 'no orphans'
+  - accepted_values ::
+    - tests if values in a column are one of the listed values
+- dbt_utils
+  - expression_is_true ::
+  - accepted_range ::
+  - ...
+**** how to execute tests
+- on all tests					: ~dbt test~
+- on all the sources					: ~dbt test -s source:*~
+- on all tables in source 'abc_bank'			: ~dbt test -s source:abc_bank.*~
+- on table 'ABC_BANK_POSITION' in source 'abc_bank'	: ~dbt test -s source:abc_bank.ABC_BANK_POSITION~
+- on model						: ~dbt test -s POSITION_ABC_BANK~
+- ~dbt build~
+  - = ~dbt run + dbt test~
+
+** 6: writing maintainable code (9h22m remaining)
+- Fact ::
+  - (a measurement of) something that happened
+- Dimension ::
+  - a descriptive info on entities involved in a Fact
+*** dbt snapshot
+- to:
+  - easily save changes of an entity
+- what:
+  - stores entitites in a Slowly Changing Dimension of type 2
+*** writing code for humans
+- what causes confusion
+  - giving same thing different names
+  - coding same thing
+    - several times
+    - in a diff way
+      - in a different file structure
+- why it matters
+  - coding is not just adding new lines
+  - you need to check what have been done already
+    - == reading 10s of rows again and again
+    - =>
+      - size of the codebase is a parameter of complexity
+	- a human brain is limited
+- => it' crucial to 
+  - removing duplicated code
+  - reduce the size of a code base
+  - reduce the need to re-read
+    - apply the Least Surprise Principle
+    - use consistently meaningful names, prefixes, suffices, layered architecture
+    - index all capabilities of a codebase
+      - in documentation that is on a consistent location
+    - use and document implementation patterns
+  - write code that is easy to understand
+    - self-explaining code
+      - CTE
+    - document "deviations from expected"
+      - in the consistent location documentation
+    - cohesive
+      - Single Responsibility Principle
+    - 3 layers of code
+      - conceptual, specification, implementation
+    - composable
+    - loosely coupled
+      - things that depend on a chain of other things, become very complex very fast
+    - apply patterns CONSISTENTLY
+    - refactor constantly what's necessary
+  - be consistent
+    - to enable a big project
+    - multiple people workin well together
+*** best practices
+**** document the important columns
+- business keys
+- foreign keys
+- important metrics and categories
+  - important: bc you expect them to be used in business rules
+**** test/assert expectations
+**** refactor code into macros
+**** use hashing for hash keys
+**** use an Adaptor model between source and refined layer
+- we have no control over the names of source columns
+- => 2 problems:
+  - changes in the source could triggers changes in
+    - code that uses this model
+    - tests
+  - the names are often not good
+- solution:
+  - create a dumb adaptation model
+    - in the staging layer
+    - to: choose good names and data types
+  - move the BR from the current model to the refined layer
+*** Zagni architectural layers
+- [[./dbt_zagni_layered-architecture.jpg]]
+**** source system
+**** staging layer
+- goal:
+  - verify the source data
+  - adapt the source data
+    - good names
+    - good types
+    - additional columns for DW
+  - keep ELT working when sources are unavailable
+- contains
+  - snapshots
+  - history
+- naming conventions:
+  - schema: STAGING
+  - file: STG_<name of source table>
+**** refined layer
+- goal: produce refined data that can be used in data marts
+  - by: applying business rules, in steps
+    - business rule =
+      - operation that changes or combines data
+    - eg:
+      - combining multiple sources
+      - calculating sum, product, ...
+- types of models
+  - TR intermediate transformation ::
+    - models
+      - for creating intermediate calculations
+      - but not yet a business concept
+    - ~: private, not for use by others
+  - REF refined model ::
+    - represents a recognizeable business concept
+      - well defined
+	- identity
+	- semantic of the concept
+    - granularity level must be clear from the name
+      - if it's not a general use level
+    - "public"
+      - reusable by others, DRY!
+  - MAP mapping model ::
+    - to: conversion from one ref system to another
+      - by: mapping keys
+    - derived from master data management systems
+    - good name: indicates the 'from', 'to', the concept
+      - eg: MAP_LOG_INVENTORY_TO_ORG_WAREHOUSE
+  - MDD Master Data Dimension model ::
+    - implement dimension directly from the Master Data Management system
+    - are not calculated
+      - in contrast to: other REF models
+  - AGG Aggregated model ::
+    - contain: aggregated or summarized data
+      - often
+	- from: REF model
+	- produces: summarize fact
+	- by: aggregating on a subset of avaiable FKs
+    - for: used in data mart
+  - PIVOT Pivoted model ::
+    - contains pivoted data
+- the name must indicate the role of the model
+**** data marts
+- goal:
+  - provide useful information to users
+  - verify published data
+- model types:
+  - DIM
+  - FACT
+- should only use REF, MDD, AGG
+- one data mart for each domain
+  - to: provide the best dataset for each
+    - right names
+    - correct depth
+    - correct granularity
+    - only useful concepts
+- 
+*** generate the DDL for Staging objects
+- query the information schema to generate STG object DDL
+  - every DB comes with an "Information Schema"
+    - =: a generated schema with data on the db
+    - in Snowflake: <my_database_name>.INFORMATION_SCHEMA
+    - view COLUMNS
+      - contains: a row for each column of each table in the DB
+  - the query
+#+BEGIN_SRC sql
+  SELECT
+    ', ' || COLUMN_NAME || ' as '|| COLUMN_NAME  || ' -- ' || DATA_TYPE as SQL_TEXT
+  FROM PORTFOLIO_TRACKING.INFORMATION_SCHEMA.COLUMNS  -- adapt to your DB
+  WHERE TABLE_SCHEMA = 'SOURCE_DATA'
+    AND TABLE_NAME = 'ABC_BANK_POSITION'
+  ORDER BY ORDINAL_POSITION                       -- the order of the columns in the table
+#+END_SRC
+  - this will generate something like this
+    #+BEGIN_SRC sql
+
+      , ACCOUNTID as ACCOUNTID -- TEXT
+      , SYMBOL as SYMBOL -- TEXT
+      , DESCRIPTION as DESCRIPTION -- TEXT
+      , EXCHANGE as EXCHANGE -- TEXT
+      , REPORT_DATE as REPORT_DATE -- DATE
+      , QUANTITY as QUANTITY -- NUMBER
+      , COST_BASE as COST_BASE -- NUMBER
+      , POSITION_VALUE as POSITION_VALUE -- NUMBER
+      , CURRENCY as CURRENCY -- TEXT
+
+    #+END_SRC
+- adapt the generated DDL SQL
+  - rename
+    - column names that will not be clear a couple of transformations down
+  - reorder
+    - put NKs and SKs at the beginning
+    - put related columns together
+- produce the final STG model DDL
+  #+BEGIN_SRC sql
+
+    SELECT
+	 <generated column block>
+    FROM {{ source('source_system', 'SOURCE_TABLE') }}
+
+  #+END_SRC
+
+*** generate staging models: goals, content, generation
+**** goals of the Adapter Staging model
+- adapt external data to better names and types
+**** realisation:
+- a sequence of CTEs
+- skeleton-code
+  - CTE template:
+  #+BEGIN_SRC sql
+    WITH
+    src_data as ( … ),
+    default_record as ( … ),
+    with_default_record as(
+        SELECT * FROM src_data
+        UNION ALL
+        SELECT * FROM default_record
+    ),
+    hashed as ( … )
+    SELECT * FROM hashed
+  #+END_SRC
+  - content:
+    - src_data CTE ::
+      - handles incoming data
+	- picking columns
+	- renaming
+	- converting type
+	- applying hard rules
+	- extracting metadata from the source data
+	  - eg: export timestamps
+    - default_record CTE ::
+      - defines 1 row with the values for the default record of the dimension
+    - with_default_record CTE ::
+      - combines the 2 previous CTE
+      - to: have the full data
+    - hashed CTE ::
+      - adds the hashes with Key and Diff definitions
+      - adds metadata that does not come from source data
+	- time of load
+      - for handling the history
+**** how:
+***** pick the desired columns of a source/landing table
+- in general: keep all columns
+  - its costly to add forgotten columns later
+- exceptions:
+  - security / compliance / legal
+    - eg: personal info, health data
+  - nonsense source data
+***** rename them
+- have conventions
+  - not: CUSTOMER_ID, CUSTOMER_CODE, CUSTOMER_NUM, CUSTOMER_NUMBER, CUSTOMER_KEY
+  - =: use always same suffic
+    - _CODE ::
+      - BK
+	- used/know to business
+      - often a string, even of digits
+      - must not be unique
+    - _ID ::
+      - unique id
+    - _KEY ::
+      - ~technical field
+	- not used by business
+      - preferably: string
+    - _NUMBER ::
+      - to avoid
+	- often containing text
+	- is mixing type <> meaning
+***** handle conversions
+- what:
+  - type
+    - string/int <> date/timestamp
+    - money amounts with wrong number of decimals
+  - timestamps split in time and date
+  - date split in month, year
+- how:
+  - keep original value in the history table
+  - add a converted value
+  - use the converted one in models
+***** apply "hard rules" with non-destructive transformations
+- what:
+  - changes
+    - that don't risk to change
+      - otherwise: put it in the Refined Layer
+	- bc: in the Refined Layer it can be changed easily
+    - on
+      - the format/representation of data
+      - not its meaning
+- to:
+  - make it available in a format we want to use
+    - == increase interoperability of the data
+- examples:
+  - trimming strings
+    - remove useless spaces
+    - remove redundant parts
+  - padding numbers to desired lenghts
+  - unpadding strings to number or string
+  - fixing cases
+  - fixing unsupported chars
+  - extracting data from hierarchical sources into fields
+    - eg: AVRO, Parquet, JSON
+  - ...
+- time-zone
+***** add the default record
+- only for: dimensions
+  - for when there is no matching record in the Dimension table
+  - represents
+    - or 'unknown'
+    - or 'missing: => a new Dimension record must be added
+- as code in STG because:
+  - allows tracking evolutions to it
+    - in git as versions
+    - in the history table
+  - source data might already contain some form of default record
+- implementation:
+  - as: a simple SELECT without any FROM
+  - CTE template:
+  #+BEGIN_SRC sql
+    SELECT
+      CASE DATA_TYPE
+          WHEN 'TEXT' THEN IFF(ENDSWITH(COLUMN_NAME,'_CODE'), ', ''-1''', ', ''Missing''')
+          WHEN 'NUMBER' THEN ', -1'
+          WHEN 'DATE' THEN ', ''2000-01-01'''
+          WHEN 'TIMESTAMP_NTZ' THEN ', ''2000-01-01'''
+          ELSE ', ''Missing'''
+      END  || ' as ' || COLUMN_NAME as SQL_TEXT
+    FROM "PORTFOLIO_TRACKING"."INFORMATION_SCHEMA"."COLUMNS"
+    WHERE TABLE_SCHEMA = 'RZ_STAGING'
+      and TABLE_NAME = 'STG_ABC_BANK_POSITION'
+    ORDER BY ORDINAL_POSITION;
+  #+END_SRC
+  - this returns someting like:
+  #+BEGIN_SRC 
+    , '-1' as ACCOUNT_CODE
+    , '-1' as SECURITY_CODE
+    , 'Missing' as SECURITY_NAME
+    , '-1' as EXCHANGE_CODE
+    , '2000-01-01' as REPORT_DATE
+    , -1 as QUANTITY
+    , -1 as COST_BASE
+    , -1 as POSITION_VALUE
+    , '-1' as CURRENCY_CODE
+  #+END_SRC
+***** add desired/available metadata
+- best practice:
+  - preserve the original field
+  - define a metadata field
+    - with: the same name
+- examples:
+  - LOAD_TS ::
+    - =: when the data is loaded into our platform
+    - required
+    - put it as the last field
+  - RECORD_SOURCE ::
+    - =: where the data comes from
+    - value comes from
+      - the data movement pipeline
+	- eg:
+	  - the filename
+	  - the table/view that is read
+    - required
+    - to: audit/understand where it came from
+  - EXTRACTION_TIME ::
+    - =: when the data was extracted from the source system
+    - <> LOAD_TS if not loaded directly from the source
+  - CREATION_TIME :: 
+    - =: when the data was first created
+      - many systems record this
+  - EFFECTIVE_FROM ::
+    - =: when the data becomes effective for business purposes
+    - to: handle multi-temporality
+      - when you received info <> when the info is in use
+  - other
+    - to: describe any aspect of
+      - the source system
+	- data quality problems
+      - data platform processes
+	- errors
+***** add identity and change detection fields
+- to:
+  - make keys and change tracking explicit
+- HASH_KEY ::
+  - function / what:
+    - have/define a single field PK
+  - goal / to:
+    - define a PK for the entity
+    - simplify/standardize loading of the history
+  - implementation / how:
+    1. concatinate of all columns of the PK
+    2. hash
+  - enables:
+    - finding all versions of an entity
+  - sometimes:
+    - multiple HASH_KEYs
+      - if the entity can be viewed in diff ways
+	- example:
+	  - local account
+	  - global account
+    - hash key for composite FKs
+      - that we want to store in the history table
+      - when:
+	- building hierarchies or dirty dimensions that use a hash of multple fields as key
+      - it's more common to add such calculated keys in the Refined Layer
+- HASH_DIFF ::
+  - what:
+    - a single field to detect changes in entity
+  - to:
+    - define of what is a change
+    - simplify/standardize loading of the history
+      - instead of needing to compare 10+ fields for change
+  - implementation:
+    1. concatinate all fields, except metadata fields
+    2. hash
+- LOAD_TS ::
+  - a timestamp 
+  - represents: when it was loaded
+  - provides:
+    - a timeline of the changes of the entity
+      - as received and stored in the data platform
+  - enables:
+    - knowing the version of an entity at a specific time
+      - in combination with the HASH_KEY
+- CTE template:
+ #+BEGIN_SRC sql
+    hashed as (
+      SELECT
+          concat_ws('|', ACCOUNT_CODE, SECURITY_CODE) 
+            as POSITION_HKEY                             -- PK of 1 field
+        , concat_ws('|', ACCOUNT_CODE, SECURITY_CODE,
+              SECURITY_NAME, EXCHANGE_CODE, REPORT_DATE,
+              QUANTITY, COST_BASE, POSITION_VALUE, CURRENCY_CODE )
+            as POSITION_HDIFF                            -- to detect changes
+        , *                                              -- + all fields of src_data
+        , '{{ run_started_at }}' as LOAD_TS_UTC          -- load timestamp
+      FROM src_data
+    )
+    SELECT * FROM hashed     
+ #+END_SRC
+  - generates:
+  - 
+***** define tests
+***** generate the model with dbt
+- run model 'STG_ABC_BANK_POSITION'	:: ~dbt run -s STG_ABC_BANK_POSITION~
+- run all models in layer 'refined'	:: ~dbt run -s refine~
+
+**** parameters for a CLI 
+- db
+- schema
+- fact/dimension
+- hashed
+  - entity name
+  - 
+
+*** connecting the REF model to the STG (instead of source)
+- best practice:
+  - respect the layers
+    - each arch layer only uses layer beneath it
+*** creating the first data mart
+*** saving history 
+**** why it is crucial
+- necessary for:
+  - auditing
+  - time travel
+  - bi-temporality
+  - analysis and improvement of operational systems and practices
+  - to build a simpler, more resilient data platform
+- STAGING saves history
+  - without refinement (application of business rules)
+- --:
+  - extra work
+    - it's useful
+      - definition of PK -> more interoperability of data in the platform
+  - extra space
+    - but generally, the rate of change is very low
+      - only a few entities have more than 1 version
+      - columnar storage reduces used space
+- INSERT only history
+  - INSERT is the most performant operation on cloud platforms
+  - preferred above:
+    - snapshots
+      - use UPDATEs
+      - are shared across ENVs
+      - become deployment issue when you want to change them
+- best practice: deal with source system exports
+  - => understanding++
+    - how each system provides data for loading
+    - whether you can capture deletions of data
+    - at what resolution you can capture changes
+- best practice: separate source system ID mgt <> master data mgt
+    - source system ID mgt
+      - to: store history
+    - master data mgt
+      - to: intergrate info
+  - ++:
+    - shows
+      - where you are missing info
+      - the need to actively manage connections between systems
+    - early on
+    - 1 entity at a time
+**** 2 ways to save changes to the instances of our entities
+- dbt snapshots
+  - standard dbt functionality
+  - easy
+    - no code to write
+      - dbt uses MERGE or DELETE/INSERT
+  - stores a new row for each new version of each instance 
+    - = SCD2
+      - Slowly Changing Dimension type 2
+  - deletions can be captured
+    - a key that is missing is considerd deleted
+    - ! only if: you receive reliable full exports
+      - so that dbt can detect missing/deleted rows
+  - ok for normal-size datasets
+    - up to millions of rows
+  - --:
+    - are global objects
+      - 1 copy and 1 version for all ENVs
+      - => changing a snapshot => all envs must be updated
+    - you cannot preview/test the select query that feeds data to the snapshot
+      - not a big issue for simple queries
+	- select * from <source>
+- incremental models
+  - "insert only history"
+  - preferred
+  - capturing changes in insert-only mode
+    - by: applying set-based operations
+  - most effective for huge amounts of data
+  - flexible
+    - can work with multiple sources for a single table
+      - near-real-time feed <> periodic control feed
+  - requires
+    - writing own macro
+      - to: implement the logic to store history
+	- check whether the version of an instance present in STG is
+	  - a new instance
+	  - a change to the last stored version of an instance
+  - will be explained in later chapters
+**** how to use dbt snapshots
+- to:
+  - capture & store incoming source data
+  - as starting point for the ETL
+    - using ~ref('snapshot_name')~
+- what:
+  - a dbt-managed table
+    - stores the data from a SELECT statement
+      - creates new row for each version
+	- like SCD2
+      - dbt adds metadata to each row
+  - a global object
+    - shared by all envs that use the same db
+      - incl. all DEV envs
+    - => when you change a snapshot => all envs need to be updated at the same time
+      - !serious impact, not for teams
+- how to create a snapshot:
+  - define a "snapshot" block in a .sql file
+  - template:
+    #+BEGIN_SRC 
+{% snapshot snapshot_name %}
+{{ config(…) }}
+select … from {{ source / ref }}
+{% endsnapshot %}      
+    #+END_SRC
+  - configure "unique_key" for the entity
+    - to:
+      - distinguish between
+	- 2 diff instances
+	- 2 versions of same instance
+    - =:
+      - a key that is only used by different versions of the same instance
+    - how:
+      - specify the PK, NK
+      - can be single field / multiple fields
+	- best practice if it's a composite key:
+	  - define a single field PK
+	  - by: a SQL expression in the SELECT of the snapshot
+  - configure "strategy" to detect changes
+    - change =: new instance <> new version of old instance
+    - 2 strategies options:
+      - timestamp
+	- ++:
+	  - simpler
+	  - quicker
+	- requires:
+	  - a reliable "updated_at" TS or "version"
+	- how:
+	  - just compare key + "updated_at"
+	  - ~updated_at='updated_at_field'~
+      - check
+	- use when: there is no reliable field
+	- =: look at the data
+	  - define a combination of columns that is same for all versions of an instances
+	- by:
+	  - configuring the columns to be checked
+	    - ~check_cols=['...']~
+	    - not:  
+	      - all columns in the select
+		- these are all stored in the snapshot
+  - configure "invalidate_hard_deletes"
+    - true: enables tracking of deletions
+- how to run a snapshot:
+  - ~dbt snapshot~
+    - =>
+      - first time:
+	- creates snapshot table, with results from the SELECT
+      - other times:
+	- updates snapshot table, with the changes coming from the SELECT
+- typical workflow:
+  - capture & store source data					:: ~dbt snapshot~
+  - read data out of the snapshots, calc transformations	:: ~dbt run~
+  - verify results						:: ~dbt test~
+  - or
+  - all 3 in 1	         					:: ~dbt build~ 
+
+**** metadata fields of snapshot tables:
+- dbt_valid_from ::
+  - =: when the row is inserted in the snapshot
+  - provides: an order for the different “versions” of an instance
+- dbt_valid_to :: 
+  - =: since when the row stopped being active
+  - NULL if still active
+- dbt_scd_id ::
+  - a unique key generated for each row in the snapshot
+  - internal to dbt
+- dbt_updated_at ::
+  - =: when the row was inserted
+  - internal to dbt.
+**** best practices for snapshots
+- minimize changes to the data
+- put Snapshots in a separate schema
+  - bc:
+    - you don't want to drop them by accident
+      - they're the only tables that can not be recreated at every run
+- snapshot source data is the first thing in the ETL
+  - rest of the ETL depends on the snapshot
+  - ?declaring a source as appropriate?
+- include all columns of the source
+  - it' difficult to backfill
+  - you can not go backfill what you don't have
+- no business logic in the SELECT
+  - only hard rules
+- avoid joins in the SELECT
+  - bc: it's difficult to
+    - detect new versions with joins
+    - absorb changes into 2 tables
+  - snapshot the 2 tables independently, join downstream
+**** multiple ways to coding the snapshot query select 
+- without transformation
+  - =: snapshot reads the source unchanged
+  - apply changes in the STG model
+  - =>
+    - the adaptor transformations must re-run every time you snapshot
+- with transformation
+  - =: snapshot reads the source & applies adaptor transformations
+  - ++
+    - => the transformation must only be done once
+    - store the data in the right data types
+  - --
+    - less easy to build/maintain the ELT
+      - you can not preview the results of the snapshot SELECT
+    - -> can be solved by declaring the STG model "ephemeral materialization"
+      - ephemeral materialization =:
+	- it's not persisted (no table/view)
+	- it's only a named query
+	- how:
+	  - add to the model config ~{{ config(materialized='ephemeral') }}~
+      - => we can use the STG to preview the results of the snapshot SELECT
+**** multiple ways to use the snapshots
+- snapshot as first step
+  - recommended by dbt
+  - 2 options for the SELECT:
+    - or: trivial ~SELECT * from {{source('...')}}~
+      - --:
+	- => source names are copied as is
+      - recommended option
+	- do Adapter transformations in the STG model just after the snapshot
+	- every time you read the data
+	- -> use an ephemeral model 
+    - or: more complicated SELECT
+      - --: not possible to preview
+- a snapshot after the STG model
+  - --:
+    - clumsy workflow if using a normal STG model
+      - run the STG Adapter models for the snapshots
+      - take the snapshots
+      - run all the other models
+  - -> this clumsy workflow can be solved by using "ephemeral materialization" STG models
+    - => you don't need to run them before the snapshot
+      - you can debug/test the SELECT
+  - ++:
+    - you receive good columns names & types
+      - from the Adapter before the snapshot
+**** developing the history
+- make STG model ephemeral
+  - {{ config(materialized='ephemeral') }}
+- create snapshot file
+  - snapshot model SNSH uses the STG model
+  - execute dbt snapshot
+- connect REF layer to snapshot
+  - only reading the active records
+** questions
+- why not treat the data generated by ML/AI or calculated in CRM/marketing tools the same way?
+- ch6:
+  - what's the difference with a default view and ephemeral view for the STG_ABC_BANK_POSITION
+    - I can not see details on the view in the Snowflake GUI
+  - 
+** 7: working with dim. data (8h7m remaining)
+- <2023-09-06 Wed>
+- dimensional data ::
+  - =: descriptive data
+    - providing human-readable information for an entity/fact
+    - eg:
+      - name of a customer
+      - country of a customer
+*** how to deliver dimensional data in data marts
+**** adding dim data
+**** loading data of first dimension
+**** building STG model for first dimension
+**** saving history for the dimensional data
+**** building the REF layer with dimensional data
+**** adding the dimensional data to the data mart
+**** exercise
+*** how to use dim. data, fact-checking
+*** example
+** 8: consistent transformations
+*** scripting, macro's, external libs
+** 9: data reliability
+*** testing expectations, 
+** 10: agile dev
+*** how to keep the backlog agile
+*** building data marts: deep dive
+** 11: collaboration
+** 12: deployment, execution, documentation automation
+*** setting up environments, jobs, 
+** 13: moving beyond the basics
+*** master data mgt: mng identity of entities
+*** pipeline modularity
+*** macro's
+*** patterns
+** 14: enhancing software Q
+*** refactoring
+** 15: patterns 
+*** history tables
