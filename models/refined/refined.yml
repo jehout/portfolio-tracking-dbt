@@ -1,6 +1,6 @@
 version: 2
 models:
-  - name: POSITION_ABC_BANK
+  - name: REF_POSITION_ABC_BANK
     description: The positions we have in the ABC Bank.
     columns:
       - name: UNREALIZED_PROFIT
