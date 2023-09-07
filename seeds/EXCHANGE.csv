@@ -1,4 +1,4 @@
-Name,ID,Country,City,Zone,Delta,DST_period,Open,Close,Lunch,Open_UTC,Close_UTC,Lunch_UTC
+Name,ID,Country,City,Zone,Delta,DST_period,Open,Close,Lunch,Open_UTC,Close_UTC,Lunch_UTC,LOAD_TS
 Euronext Amsterdam,AMS,Netherlands,Amsterdam,CET,1,Mar-Oct,09:00,17:40,No,08:00,16:40,No
 Armenia Securities Exchange,AMX,Armenia,Yerevan,AMT,4,,10:00,15:00,No,06:00,11:00,No
 Amman Stock Exchange,ASE,Jordan,Amman,EET,2,Mar-Oct,10:00,12:00,No,08:00,10:00,No
