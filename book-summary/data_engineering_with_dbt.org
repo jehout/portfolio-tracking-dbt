@@ -2677,7 +2677,7 @@ CREATE FILE FORMAT
     hashed as (
       SELECT
           concat_ws('|', ACCOUNT_CODE, SECURITY_CODE) 
-            as POSITION_HKEY                             -- PK of 1 field
+            as POSITION_HKEY                             -- 1-field-PK
         , concat_ws('|', ACCOUNT_CODE, SECURITY_CODE,
               SECURITY_NAME, EXCHANGE_CODE, REPORT_DATE,
               QUANTITY, COST_BASE, POSITION_VALUE, CURRENCY_CODE )
@@ -2954,7 +2954,21 @@ select … from {{ source / ref }}
 - ch6:
   - what's the difference with a default view and ephemeral view for the STG_ABC_BANK_POSITION
     - I can not see details on the view in the Snowflake GUI
-  - 
+  - why include the column that is used as HKEY in the HDIFF?
+- ch7:
+  - why not declare the source build on the CSV seed in schema SOURCE_DATA?
+    - as is done for ABC_BANK_POSITION
+  - why is there a model folder /seed
+  - seed ABC_Bank_SECURITY_INFO
+    - is put in schema 'seed_data'
+      - 'seed_data' -> lower case? other schema's are upper case
+      - 'ABC_Bank_SECURITY_INFO' -> Bank in camel-case?
+    - is named 'seeds' in the model, but has a diff schema name 'target-schema_SEED'
+  - how come, after remove the {{materialization="ephemeral"}} from the staging models, I still see no STAGING schema in Snowflake?
+- general remarks
+  - there is never an overview of what the result should be in the DB
+    - => reader might be on the wrong but doesn't know it
+
 ** 7: working with dim. data (8h7m remaining)
 - <2023-09-06 Wed>
 - dimensional data ::
@@ -2964,7 +2978,14 @@ select … from {{ source / ref }}
       - name of a customer
       - country of a customer
 *** how to deliver dimensional data in data marts
-**** adding dim data
+**** overzicht
+- .csv -> JEH_SEED_DATA.ABC_BANK_SECURITY_INFO'
+  - + LOAD_TS
+    - in dbt_project.yml.seeds
+      - declared type 'timestamp'
+      - an update with post-hook
+- JEH_SEED_DATA.ABC_BANK_SECURITY_INFO -> jeh_STG.STG_ABC_BANK_SECURITY_INFO
+**** dimension data: conceptual model & star schema
 - dimension data 
   - 4 dimensions in the data
   - 1 implicit dimension in the filename/source of the data
@@ -2979,7 +3000,9 @@ select … from {{ source / ref }}
 - commit & push the .CSV under /seeds
 - configure dbt_project.yml to load the seed in schema 'seed_data'
 - run ~dbt seed~
-  - should have created a table in the schema, with the data inserted
+  - creates a table in the schema, with the data inserted
+    - table name: name of the .csv
+    - schema name: name of the schema in the dbt_project.yaml>seeds.schema
 - adding data types and timestamp to the seed
   - add ',LOAD_TS' to the header line of the .csv
     - nothing in the other lines
@@ -2988,7 +3011,7 @@ select … from {{ source / ref }}
     - in dbt_project.yml
   - configure a post-hook to execute an SQL after creation of a model
     - in dbt_project.xml
-    - write the SQL inside a "..."
+    - write the SQL inside double quotes ("...")
       - to: enable use of ' inside the SQL query
     - uses dbt scripting
       - ~{{ this }}~
@@ -2998,7 +3021,37 @@ select … from {{ source / ref }}
     - it will drop & recreate the seed table
 
 **** building STG model for first dimension
+***** defining the external data source for seeds
+- why
+  - we could reference the seed table with ~ref()~
+  - but
+    - the .csv seed is a temporary solution
+    - later it might come from a diff place
+      - eg:
+	- from a master data system
+	- from a data lake
+  - => use the seed data via a source table
+    - to: enable reading the seeds in a metadata-driven way
+      - =: with ~source(...)~
+- create new file source_seed.yml in /models
+  - containing the config
+    - schema
+    - tables
+***** creating a STG model for the security dimension
+- with the CTE template for Adapters
+  - reading from SEED
+***** adding the default record to the STG
+- default values for the default Dimension records
+  - for 
+    - CODE fields: '-1'
+      - to: indicate absence of a code value in the Dimension 
+    - RECORD_SOURCE: 'System.DefaultKey'
+      - to: indicate it comes not from a source but from our system
+    - strings: 'Missing'
+    - numbers: -1
+
 **** saving history for the dimensional data
+***** with a snapshot
 **** building the REF layer with dimensional data
 **** adding the dimensional data to the data mart
 **** exercise
