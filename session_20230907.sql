@@ -10,4 +10,15 @@
 select SECURITY_CODE, SECURITY_HDIFF from {{ref('STG_ABC_BANK_SECURITY_INFO')}};
 
 -- exchange
+--- source
 select * from {{source('seeds', 'EXCHANGE')}};
+
+-- stg
+SELECT
+    ', ' || COLUMN_NAME || ' as '|| COLUMN_NAME  || ' -- ' || DATA_TYPE as SQL_TEXT
+FROM PORTFOLIO_TRACKING.INFORMATION_SCHEMA.COLUMNS  -- adapt to your DB
+WHERE TABLE_SCHEMA = 'JEH_SEED_DATA'
+    AND TABLE_NAME = 'EXCHANGE'
+ORDER BY ORDINAL_POSITION;                       -- the order of the columns in the table
+
+select * from {{ ref('STG_EXCHANGE') }}
