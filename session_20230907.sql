@@ -8,3 +8,6 @@
 
 --select * from {{source('seeds', 'ABC_Bank_SECURITY_INFO')}};
 select SECURITY_CODE, SECURITY_HDIFF from {{ref('STG_ABC_BANK_SECURITY_INFO')}};
+
+-- exchange
+select * from {{source('seeds', 'EXCHANGE')}};

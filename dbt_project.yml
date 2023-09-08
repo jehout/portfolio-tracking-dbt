@@ -51,5 +51,10 @@ seeds:                                # Configuring Seeds
     EXCHANGE:
       +column_types:
         LOAD_TS: TIMESTAMP
+        Open: TIME
+        Open_UTC: TIME
+        Close: TIME
+        Close_UTC: TIME
+        Zone: varchar(4)
       +post-hook:
         - "update {{ this }} SET LOAD_TS = '{{ run_started_at }}' where LOAD_TS is null"
