@@ -13,8 +13,8 @@ with src_data as (
         , ZONE			as TIME_ZONE_CODE	-- TEXT
         , DELTA		    as UTC_OFFSET		-- FLOAT
         --, DST_PERIOD		as DST_PERIOD		-- TEXT
-        , substring(DST_PERIOD, 0,3)		as DST_START_MONTH		-- TEXT TODO: could be number
-        , substring(DST_PERIOD, 5,7)		as DST_END_MONTH		-- TEXT TODO
+        , case when DST_PERIOD is null then 'N/A' else substring(DST_PERIOD, 0,3) end	as DST_START_MONTH		-- TEXT TODO: could be number
+        , case when DST_PERIOD is null then 'N/A' else substring(DST_PERIOD, 5,7) end	as DST_END_MONTH		-- TEXT TODO
         , OPEN			as OPEN_TIME			-- TIME
         , CLOSE		    as CLOSE_TIME		-- TIME
         , LUNCH		    as LUNCH_PERIOD		-- TEXT
@@ -32,15 +32,15 @@ default_row as (
         , 'Missing'		as COUNTRY_NAME		-- TEXT
         , 'Missing'		as CITY_NAME		-- TEXT
         , '-1'			as TIME_ZONE_CODE	-- TEXT
-        , null  		as UTC_OFFSET		-- FLOAT
+        , 999  		as UTC_OFFSET		-- FLOAT
         , 'Missing'		as DST_START_MONTH		-- TEXT
         , 'Missing'		as DST_END_MONTH		-- TEXT
-        , null		    as OPEN_TIME			-- TIME
-        , null  		as CLOSE_TIME		-- TIME
+        , '00:00:00'		    as OPEN_TIME			-- TIME
+        , '00:00:00'  		as CLOSE_TIME		-- TIME
         , 'Missing'		as LUNCH_PERIOD		-- TEXT
-        , null		    as OPEN_TIME_UTC		-- TIME
-        , null  		as CLOSE_TIME_UTC		-- TIME
-        , null  		as LUNCH_PERIOD_UTC		-- TEXT
+        , '00:00:00'		    as OPEN_TIME_UTC		-- TIME
+        , '00:00:00'  		as CLOSE_TIME_UTC		-- TIME
+        , 'Missing'  		as LUNCH_PERIOD_UTC		-- TEXT
         , '2000-01-01'  as LOAD_TS_UTC
         , 'System.DefaultKey' as RECORD_SOURCE  -- the default row does not come from the seed !
 ), 
