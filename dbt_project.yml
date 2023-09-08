@@ -39,3 +39,22 @@ models:
 snapshots:
   portfolio_tracking:
     +target_schema: SNAPSHOTS
+
+seeds:                                # Configuring Seeds
+  +schema: SEED_DATA                  # this is applied to all seeds, including the ones imported by other libraries
+  portfolio_tracking:                 # seeds of our prj
+    ABC_Bank_SECURITY_INFO:
+      +column_types:
+        LOAD_TS: TIMESTAMP 
+      +post-hook:                     # SQL that runs after the creation of the model
+        - "UPDATE {{ this }} SET LOAD_TS = '{{ run_started_at }}' WHERE LOAD_TS is null"
+    EXCHANGE:
+      +column_types:
+        LOAD_TS: TIMESTAMP
+        Open: TIME
+        Open_UTC: TIME
+        Close: TIME
+        Close_UTC: TIME
+        Zone: varchar(4)
+      +post-hook:
+        - "update {{ this }} SET LOAD_TS = '{{ run_started_at }}' where LOAD_TS is null"
