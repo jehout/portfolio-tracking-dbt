@@ -20,5 +20,13 @@ FROM PORTFOLIO_TRACKING.INFORMATION_SCHEMA.COLUMNS  -- adapt to your DB
 WHERE TABLE_SCHEMA = 'JEH_SEED_DATA'
     AND TABLE_NAME = 'EXCHANGE'
 ORDER BY ORDINAL_POSITION;                       -- the order of the columns in the table
+---
+select * from {{ ref('STG_EXCHANGE') }};
 
-select * from {{ ref('STG_EXCHANGE') }}
+
+
+-- fixing the dates of CSV abc_bank_positions
+--- investigating the problem: the report-date in the csv is interpreted by Snowflake as a year 0021 instead of 2021
+select *, year(report_date), month(report_date), day(report_date) 
+, year(dateadd(year, 2000, report_date))--, month(report_date), day(report_date) 
+from {{ source('abc_bank', 'ABC_BANK_POSITION') }};
