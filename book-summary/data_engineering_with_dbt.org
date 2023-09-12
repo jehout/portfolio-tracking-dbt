@@ -3064,8 +3064,15 @@ select … from {{ source / ref }}
 - filtering out the snapshot metadata cols, HKEY, HDIFF, ...
 **** adding the dimensional data to the data mart
 **** exercise
-*** how to use dim. data, fact-checking
-*** example
+***** lessons learned:
+- post-hook to update the LOAD_TS fails, if
+  - in the csv ', LOAD_TS' was added
+  - -> it must be without space ',LOAD_TS'
+- failed column types specification
+  - because: column names were wrong
+    - these are case-sensitive!
+  - => 0 records loaded
+
 ** 8: consistent transformations
 *** scripting, macro's, external libs
 ** 9: data reliability
