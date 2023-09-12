@@ -33,8 +33,22 @@ from {{ source('abc_bank', 'ABC_BANK_POSITION') }};
 
 -- calculating hashes for HKEY, HDIFF of STG_ABC_BANK_POSITION
 --- drop snsh 
-select * from {{ ref('SNSH_ABC_BANK_POSITION') }}; -- for checking if the HKEY and HREF are fixed
---- drop table {{ ref('SNSH_ABC_BANK_POSITION') }}; -- can not drop in dbt worksheet, dbt adds a 'limit 500' to the DROP statement
---- rebuild the snapshot table: dbt snapshot -s SNSH_ABC_BANK_POSITION
+select * from {{ ref('SNSH_ABC_BANK_POSITION') }}; 
+--- drop table {{ ref('SNSH_ABC_BANK_POSITION') }};
+--- rebuild the snapshot table: dbt snapshot -s ...
 select * from {{ ref('REF_POSITION_ABC_BANK') }};
 select * from {{ ref('FACT_POSITION') }};
+
+-- calculating hashes for HKEY, HDIFF of STG_ABC_BANK_SECURITY_INFO
+select * from {{ ref('SNSH_ABC_BANK_SECURITY_INFO') }};
+--- drop table {{ ref('SNSH_ABC_BANK_SECURITY_INFO') }};
+--- rebuild the snapshot table: dbt snapshot -s ...
+select * from {{ ref('REF_ABC_BANK_SECURITY_INFO') }};
+select * from {{ ref('DIM_SECURITY') }};
+
+-- calculating hashes for HKEY, HDIFF of STG_ABC_BANK_SECURITY_INFO
+select * from {{ ref('SNSH_EXCHANGE') }};
+---drop table {{ ref('SNSH_EXCHANGE') }};
+--- rebuild the snapshot table: dbt snapshot -s ...
+select * from {{ ref('REF_EXCHANGE') }};
+select * from {{ ref('DIM_EXCHANGE') }};

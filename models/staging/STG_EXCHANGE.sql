@@ -13,8 +13,10 @@ with src_data as (
         , ZONE			as TIME_ZONE_CODE	-- TEXT
         , DELTA		    as UTC_OFFSET		-- FLOAT
         --, DST_PERIOD		as DST_PERIOD		-- TEXT
-        , case when DST_PERIOD is null then 'N/A' else substring(DST_PERIOD, 0,3) end	as DST_START_MONTH		-- TEXT TODO: could be number
-        , case when DST_PERIOD is null then 'N/A' else substring(DST_PERIOD, 5,7) end	as DST_END_MONTH		-- TEXT TODO
+        --, case when DST_PERIOD is null then 'N/A' else substring(DST_PERIOD, 0,3) end	as DST_START_MONTH		-- TEXT TODO: could be number
+        , substring(DST_PERIOD, 0,3)	as DST_START_MONTH		-- TEXT TODO: could be number
+        , substring(DST_PERIOD, 5,7)	as DST_END_MONTH		-- TEXT TODO
+        --, case when DST_PERIOD is null then 'N/A' else substring(DST_PERIOD, 5,7) end	as DST_END_MONTH		-- TEXT TODO
         , OPEN			as OPEN_TIME			-- TIME
         , CLOSE		    as CLOSE_TIME		-- TIME
         , LUNCH		    as LUNCH_PERIOD		-- TEXT
@@ -51,22 +53,22 @@ with_default_row as (
 ), 
 hashed as (
     select 
-          concat_ws('|', EXCHANGE_CODE) as EXCHANGE_HKEY
-          , concat_ws('|' 
-                , EXCHANGE_NAME	
-                , COUNTRY_NAME	
-                , CITY_NAME	
-                , TIME_ZONE_CODE	
-                , UTC_OFFSET		
-                , DST_START_MONTH
-                , DST_END_MONTH
-                , OPEN_TIME
-                , CLOSE_TIME
-                , LUNCH_PERIOD
-                , OPEN_TIME_UTC	
-                , CLOSE_TIME_UTC	
-                , LUNCH_PERIOD_UTC	          
-	            ) as EXCHANGE_HDIFF
+          {{ dbt_utils.generate_surrogate_key(['EXCHANGE_CODE']) }} as EXCHANGE_HKEY
+          , {{ dbt_utils.generate_surrogate_key([
+                'EXCHANGE_NAME'	
+                , 'COUNTRY_NAME'	
+                , 'CITY_NAME'	
+                , 'TIME_ZONE_CODE'	
+                , 'UTC_OFFSET'		
+                , 'DST_START_MONTH'
+                , 'DST_END_MONTH'
+                , 'OPEN_TIME'
+                , 'CLOSE_TIME'
+                , 'LUNCH_PERIOD'
+                , 'OPEN_TIME_UTC'	
+                , 'CLOSE_TIME_UTC'	
+                , 'LUNCH_PERIOD_UTC'] 
+          ) }} as EXCHANGE_HDIFF
           , * 
     from with_default_row
 )
