@@ -1,6 +1,4 @@
 WITH current_from_snapshot AS (
-    select *  
-    from {{ ref('SNSH_EXCHANGE') }}
-    WHERE DBT_VALID_TO is null
+    {{ current_from_snapshot(snsh_ref=ref('SNSH_EXCHANGE'), output_snsh_load_ts=false)}}
 )
 SELECT * from current_from_snapshot
