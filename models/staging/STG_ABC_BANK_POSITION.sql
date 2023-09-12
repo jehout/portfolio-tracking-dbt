@@ -21,10 +21,13 @@ src_data as (
 
 hashed as (
     SELECT
-          concat_ws('|', ACCOUNT_CODE, SECURITY_CODE) as POSITION_HKEY
-        , concat_ws('|', ACCOUNT_CODE, SECURITY_CODE,
-                SECURITY_NAME, EXCHANGE_CODE, REPORT_DATE,
-                QUANTITY, COST_BASE, POSITION_VALUE, CURRENCY_CODE ) as POSITION_HDIFF
+        {{ dbt_utils.generate_surrogate_key(['ACCOUNT_CODE', 'SECURITY_CODE']) 
+        }} as POSITION_HKEY
+        , {{ dbt_utils.generate_surrogate_key([
+            'ACCOUNT_CODE', 'SECURITY_CODE',
+            'SECURITY_NAME', 'EXCHANGE_CODE', 'REPORT_DATE',
+            'QUANTITY', 'COST_BASE', 'POSITION_VALUE', 'CURRENCY_CODE']) 
+        }} as POSITION_HDIFF
         , *
         , '{{ run_started_at }}'::timestamp as LOAD_TS_UTC
     FROM src_data
