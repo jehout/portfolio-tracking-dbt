@@ -3073,8 +3073,19 @@ select … from {{ source / ref }}
     - these are case-sensitive!
   - => 0 records loaded
 
-** 8: consistent transformations
-*** scripting, macro's, external libs
+** 8: consistent transformations: scripting, macro's, external libs
+*** exercise: removed the dbt_snapshot cols from REF, with a custom macro
+*** exercise: using dbt-utils for hashing HKEY, HDIFF
+**** lessons learned
+- FACT_POSITION is a table,
+  - => it must be re-'run' or build after fixing the SNSH table and REF view
+  - it must not be dropped
+    - rebuilding is does a 'CREATE TABLE AS ...'
+- the snapshot contained bad records
+  - changing the definition of the HKEY and HDIFF, creates new records for the same input data
+    - it sees different HKEYS, so it interpretes it as new instances
+  - => SNSH must be dropped and recreated (~dbt snapshot -s ...~)
+- rerunning the snapshot only takes the changed STG CTE into account after it is saved!
 ** 9: data reliability
 *** testing expectations, 
 ** 10: agile dev
