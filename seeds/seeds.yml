@@ -1,0 +1,31 @@
+version: 2
+seeds:
+  - name: ABC_Bank_SECURITY_INFO
+    columns:  
+      - name: SECURITY_CODE
+        tests:
+          - not_null
+          - unique
+      - name: SECURITY_NAME
+        tests:
+          - not_null
+          - dbt_utils.not_empty_string
+      - name: SECTOR
+        tests:
+          - not_null
+          - dbt_utils.not_empty_string
+      - name: INDUSTRY
+        tests:
+          - not_null
+          - dbt_utils.not_empty_string
+      - name: COUNTRY
+        tests:
+          - not_null
+          - dbt_utils.not_empty_string
+      - name: EXCHANGE
+        tests:
+          - not_null
+          - dbt_utils.not_empty_string
+      - name: LOAD_TS
+        tests:
+          - not_null
