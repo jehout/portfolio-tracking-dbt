@@ -1,0 +1,15 @@
+models:
+  - name: FACT_POSITION
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - ACCOUNT_CODE
+            - SECURITY_CODE
+  - name: DIM_SECURITY
+    columns:
+      - name: SECURITY_CODE
+        tests:
+          - not_null
+          - unique
+              
+      
